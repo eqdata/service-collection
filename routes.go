@@ -22,13 +22,19 @@ var routes = Routes {
 	Route {
 		"Store Auction",
 		"POST",
-		"/channel/auction",
+		"/channels/auction",
 		AC.store,
 	},
 	Route {
 		"Fetch Item",
 		"GET",
-		"/item/{item_name}",
+		"/items/{item_name}",
 		IC.fetch,
+	},
+	Route {
+		"Fetch Player",
+		"GET",
+		"/players/{player_name}",
+		PC.fetch,
 	},
 }
