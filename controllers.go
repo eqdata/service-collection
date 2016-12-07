@@ -7,3 +7,4 @@ type Controller interface {}
 // Instantiate all controllers here so that we can bind them to our routes
 var AC = new(AuctionController)
 var BC = new(BaseController)
+var IC = new(ItemController)

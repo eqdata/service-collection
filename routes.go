@@ -20,9 +20,15 @@ var routes = Routes {
 		BC.index,
 	},
 	Route {
-		"Auction",
+		"Store Auction",
 		"POST",
 		"/channel/auction",
 		AC.store,
+	},
+	Route {
+		"Fetch Item",
+		"GET",
+		"/item/{item_name}",
+		IC.fetch,
 	},
 }

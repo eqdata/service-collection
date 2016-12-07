@@ -8,9 +8,10 @@ import (
 
 type AuctionController struct { Controller }
 
-// Stores
+// Stores auction data to the Amazon RDS storage once it has been parsed
 func (c *AuctionController) store(w http.ResponseWriter, r  *http.Request) {
 	fmt.Println("Hello :D", r.Body)
+
 
 	go c.parse() // We don't care when this finishes so run it as an async go process
 }
