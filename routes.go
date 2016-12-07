@@ -17,12 +17,12 @@ var routes = Routes {
 		"Index",
 		"GET",
 		"/",
-		BaseController.index,
+		BC.index,
 	},
 	Route {
 		"Auction",
 		"POST",
 		"/channel/auction",
-		AuctionController.store,
+		AC.store,
 	},
 }

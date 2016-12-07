@@ -5,5 +5,5 @@ package main
 type Controller interface {}
 
 // Instantiate all controllers here so that we can bind them to our routes
-var AuctionController 	= new(AuctionChannelController)
-var BaseController 	= new(BaseController)
+var AC = new(AuctionChannelController)
+var BC = new(BaseController)

@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"fmt"
+	"time"
 )
 
 type AuctionChannelController struct { Controller }
@@ -11,7 +12,7 @@ type AuctionChannelController struct { Controller }
 func (c *AuctionChannelController) store(w http.ResponseWriter, r  *http.Request) {
 	fmt.Println("Hello :D", r.Body)
 
-	c.publish()
+	go c.parse() // We don't care when this finishes so run it as an async go process
 }
 
 // Publishes new auction data to Amazon SQS, this service is responsible
@@ -19,4 +20,12 @@ func (c *AuctionChannelController) store(w http.ResponseWriter, r  *http.Request
 // is the subscriber which streams the data to the consumer via socket.io
 func (c *AuctionChannelController) publish() {
 	fmt.Println("Pushing data to queue system")
+}
+
+//
+func (c *AuctionChannelController) parse() {
+	// This just emulates that this is now asynchronous
+	time.Sleep(2 * time.Second)
+	fmt.Println("Parsing the data!")
+	c.publish()
 }
