@@ -32,23 +32,35 @@ func (d *Database) Open() bool {
 	return true
 }
 
-func (d *Database) Query(query string) {
+func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
 	if d.conn == nil {
 		fmt.Println("Spawning a new connection")
 		d.Open()
 	}
+
+	fmt.Println("Interfaces: ", parameters)
 
 	fmt.Println("Preparing query: " + query)
 	stmt, err := d.conn.Prepare(query)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+	defer stmt.Close()
 
-	_, err = stmt.Exec()
-	if err != nil {
-		fmt.Println(err.Error())
+	if len(parameters) > 0 {
+		rows, err := stmt.Query(parameters...)
+		if err != nil {
+			fmt.Println("Error sending query: ", err)
+			return nil
+		}
+		return rows
 	} else {
-		fmt.Println("Query successful")
+		rows, err := stmt.Query()
+		if err != nil {
+			fmt.Println("Error sending query: ", err)
+			return nil
+		}
+		return rows
 	}
 }
 

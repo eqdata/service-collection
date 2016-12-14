@@ -18,4 +18,6 @@ const SQL_DB   = ""
 // Memcached Config
 const MC_HOST = "";
 const MC_PORT = "";
+
+const CACHE_TIME_IN_SECS = 60
  */

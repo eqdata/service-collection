@@ -55,8 +55,8 @@ func (c *AuctionController) shouldParse(line *string) bool {
 	_, err := mc.Get(fmt.Sprint(hash))
 	if err != nil {
 		if err.Error() == "memcache: cache miss" {
-			fmt.Println("Setting in cache for: " + fmt.Sprint(60) + " seconds")
-			mc.Set(&memcache.Item{Key: fmt.Sprint(hash), Value: []byte(*line), Expiration: 60})
+			fmt.Println("Setting in cache for: " + fmt.Sprint(CACHE_TIME_IN_SECS) + " seconds")
+			mc.Set(&memcache.Item{Key: fmt.Sprint(hash), Value: []byte(*line), Expiration: CACHE_TIME_IN_SECS})
 			return true
 		} else {
 			fmt.Println("Error was: ", err)

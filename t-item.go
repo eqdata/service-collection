@@ -130,7 +130,11 @@ func (i *Item) fetchDataFromWiki() {
 // other than a bool, it will return a parsed Item struct from a deserialised JSON object
 // sent back from the mongo store
 func (i *Item) fetchDataFromSQL() bool {
-	DB.Query("SELECT * FROM items WHERE name = \"Axe_of_the_Iron_Back\"")
+	rows := DB.Query("SELECT * FROM items WHERE name = ?", "Axe_of_the_Ironback")
+	if rows != nil {
+		fmt.Println("Got results: ", rows)
+		defer rows.Close()
+	}
 
 	return true
 }
