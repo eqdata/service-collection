@@ -3,18 +3,17 @@ package main
 import (
 	"net/http"
 	"fmt"
-	"time"
 	"encoding/json"
 	"strings"
 	"regexp"
 	"github.com/alexmk92/stringutil"
 	"strconv"
+	"hash/fnv"
+	"github.com/bradfitz/gomemcache/memcache"
 )
 
 type AuctionController struct {
 	Controller
-
-	lastParseDateTime time.Time
 }
 
 // Stores auction data to the Amazon RDS storage once it has been parsed
@@ -38,8 +37,36 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	go c.parse(&auctions)
 }
 
-func (c *AuctionController) shouldParse() bool {
-	return true
+func (c *AuctionController) shouldParse(line *string) bool {
+
+	// Create a 64bit hash key from this string
+	hash := func(ln string) uint64 {
+		h:= fnv.New64a()
+		h.Write([]byte(ln))
+		return h.Sum64()
+	}(*line)
+
+	fmt.Println("The hash is: ", hash)
+
+	// Check memcached to see if it exist
+	mc := memcache.New(MC_HOST + ":" + MC_PORT)
+
+	// Use an _ as we don't need to use the cache item returned
+	_, err := mc.Get(fmt.Sprint(hash))
+	if err != nil {
+		if err.Error() == "memcache: cache miss" {
+			fmt.Println("Setting in cache for: " + fmt.Sprint(60) + " seconds")
+			mc.Set(&memcache.Item{Key: fmt.Sprint(hash), Value: []byte(*line), Expiration: 60})
+			return true
+		} else {
+			fmt.Println("Error was: ", err)
+			return false
+		}
+	}
+
+	// If we got here then we couldn't reach memcached, or there was a value
+	// returned from memcached in which case we don't want to parse
+	return false
 }
 
 // Publishes new auction data to Amazon SQS, this service is responsible
@@ -51,41 +78,40 @@ func (c *AuctionController) publish() {
 
 //
 func (c *AuctionController) parse(auctions *RawAuctions) {
-	// This just emulates that this is now asynchronous
+
 	for _, line := range auctions.Lines {
+
+		fmt.Println("Parsing line: ", line)
+
 		// Split the auction string so we have date on the left and auctions on the right
 		parts := strings.Split(line, "]")
 
-		layout := "Mon Jan 2 15:04:05 2006"
-		date := strings.TrimSpace(strings.Replace(parts[0], "[", "", -1))
-		t, err := time.Parse(layout, date)
-		if(err != nil) {
-			fmt.Println("ERROR WHEN PARSING DATE: ", err)
+		// Remove date stamp as this is localized to the users computer, we can't reliably
+		// use this as the auction date time stamp because we can't reliably dictate if
+		// the log-client is GMT, PST, EST etc.
+		line = parts[1]
+
+
+		// Explode this array so we are left with the seller on the left and items on the right
+		auctionParts := strings.Split(parts[1], "auctions,")
+
+		seller := auctionParts[0]
+
+		// Sale data is always encapsulated in single quotes, taking a substring removes these
+		items := strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-1]
+		items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
+
+		// Discard the WTB portion of the string
+		wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
+		if(wtbIndex > -1) {
+			items = items[0:wtbIndex]
 		}
 
-		gmt := time.FixedZone("GMT", 0)
+		fmt.Println("Line is now: ", line)
 
-		dateTime := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), gmt)
-		if dateTime.UnixNano() < c.lastParseDateTime.UnixNano() {
-			fmt.Println("Already got latest timestamp")
-			return
+		if !c.shouldParse(&line) {
+			fmt.Println("Can't parse this line")
 		} else {
-			c.lastParseDateTime = dateTime
-			// Explode this array so we are left with the seller on the left and items on the right
-			auctionParts := strings.Split(parts[1], "auctions,")
-
-			seller := auctionParts[0]
-
-			// Sale data is always encapsulated in single quotes, taking a substring removes these
-			items := strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-1]
-			items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
-
-			// Discard the WTB portion of the string
-			wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
-			if(wtbIndex > -1) {
-				items = items[0:wtbIndex]
-			}
-
 			// trim any leading/trailing space so that we only explode string list on proper constraints
 			items = strings.TrimSpace(items)
 			itemList := strings.FieldsFunc(items, func(r rune) bool {
@@ -105,11 +131,9 @@ func (c *AuctionController) parse(auctions *RawAuctions) {
 				item := Item {
 					name: itemName,
 				}
-				item.FetchData(fetchChannel)
+				go item.FetchData(fetchChannel)
 			}
 		}
-
-		fmt.Println("Last serviced at: ", c.lastParseDateTime)
 	}
 
 	//c.publish()

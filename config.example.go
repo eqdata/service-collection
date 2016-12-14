@@ -8,8 +8,14 @@ const DEBUG = true
 
 const WIKI_BASE_URL string = "http://wiki.project1999.com"
 
-const DB_HOST = "";
-const DB_PORT = "";
-const DB_USER = "";
-const DB_PASS = "";
+// SQL DB Config
+const SQL_HOST = "";
+const SQL_PORT = "";
+const SQL_USER = "";
+const SQL_PASS = "";
+const SQL_DB   = ""
+
+// Memcached Config
+const MC_HOST = "";
+const MC_PORT = "";
  */

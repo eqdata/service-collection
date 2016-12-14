@@ -53,10 +53,8 @@ type Item struct {
 func (i *Item) FetchData(done chan <- bool) {
 	fmt.Println("Fetching data for item: ", i.name)
 	i.getPricingData()
-	return
 
-	if(i.fetchDataFromCache()) {
-		fmt.Println("It exists in cache already")
+	if(i.fetchDataFromSQL()) {
 		done <- true
 	} else {
 		i.fetchDataFromWiki()
@@ -131,8 +129,10 @@ func (i *Item) fetchDataFromWiki() {
 // Check our cache first to see if the item exists - this will eventually return something
 // other than a bool, it will return a parsed Item struct from a deserialised JSON object
 // sent back from the mongo store
-func (i *Item) fetchDataFromCache() bool {
-	return false
+func (i *Item) fetchDataFromSQL() bool {
+	DB.Query("SELECT * FROM items WHERE name = \"Axe_of_the_Iron_Back\"")
+
+	return true
 }
 
 // Extracts data from body
