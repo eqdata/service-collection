@@ -19,32 +19,20 @@ import (
  | hit our file cache, if the item doesn't exist there we fetch
  | it from the Wiki and then store it to our Mongo store
  |
- | @member name (string): Name of the item
+ | @member name (string): Name of the item (url encoded)
+ | @member displayName (string): Name of the item (browser friendly)
+ | @member imageSrc (string): URL for the image stored on wiki
  | @member price (float32): The advertised price
- | @member types ([]string): Type of item, is it MAGIC ITEM, LORE etc.
- | @member slot ([]string): The slots this item can go in i.e. Primary & Secondary
- | @member skill (string): Is this 1h/2h slash etc. if empty its armor
- | @member delay (uint8): The delay of the weapon, if 0 its armor
  | @member statistics ([]Statistic): An array of all stats for this item
- | @member classes ([]string): An array of all classes than can use this item
- | @member races ([]string): An array of all races that can use this item
- | @member weight (uint8): How much this item weighs
- | @member size (string): Is this item SMALL, MEDIUM, LARGE etc.
  |
  */
 
 type Item struct {
 	name string
+	displayName string
+	imageSrc string
 	price float32
-	types []string
-	slot []string
-	skill string
-	delay uint8
 	statistics []Statistic
-	classes []string
-	races []string
-	weight uint8
-	size string
 }
 
 // Public method to fetch data for this item, in Go public method are
@@ -130,13 +118,43 @@ func (i *Item) fetchDataFromWiki() {
 // other than a bool, it will return a parsed Item struct from a deserialised JSON object
 // sent back from the mongo store
 func (i *Item) fetchDataFromSQL() bool {
-	rows := DB.Query("SELECT * FROM items WHERE name = ?", "Axe_of_the_Ironback")
+	var (
+		name string
+		displayName string
+		statCode interface{}
+		statValue interface{}
+	)
+
+	query := "SELECT name, displayName, code AS statCode, value AS statValue " +
+		"FROM items " +
+		"LEFT JOIN statistics " +
+		"ON items.id = statistics.item_id " +
+		"WHERE name = ? " +
+		"OR displayName = ?"
+
+	rows := DB.Query(query, i.name, i.name)
 	if rows != nil {
-		fmt.Println("Got results: ", rows)
 		defer rows.Close()
+
+		hasStat := false
+		for rows.Next() {
+			err := rows.Scan(&name, &displayName, &statCode, &statValue)
+			if err != nil {
+				fmt.Println("Scan error: ", err)
+			}
+			if statCode == nil || statValue == nil {
+				fmt.Println("No stat exists for: ", displayName)
+			} else {
+				hasStat = true
+			}
+			fmt.Println("Row is: ", name, displayName, fmt.Sprint(statCode), fmt.Sprint(statValue))
+		}
+		return hasStat
+	} else {
+		fmt.Println("No rows found")
 	}
 
-	return true
+	return false
 }
 
 // Extracts data from body
@@ -150,7 +168,7 @@ func (i *Item) extractItemDataFromHttpResponse(body string) {
 
 		// Extract the item image - this assumes that the format is consistent (tested with 30 items thus far)
 		imageSrc := body[stringutil.CaseInsensitiveIndexOf(body, "/images"):stringutil.CaseInsensitiveIndexOf(body, "width")-2]
-		fmt.Println("IMAGE SRC IS: ", imageSrc)
+		i.imageSrc = imageSrc
 
 		// Extract the item information snippet
 		openInfoParagraphIndex := stringutil.CaseInsensitiveIndexOf(body, "<p>") + 3 // +3 to ignore the <p> chars
@@ -159,21 +177,73 @@ func (i *Item) extractItemDataFromHttpResponse(body string) {
 
 		upperParts := strings.Split(strings.TrimSpace(body), "<br />")
 		fmt.Println(len(upperParts))
-		fmt.Println(upperParts)
 
-		fmt.Println("Printing lower parts")
 		for _, part := range upperParts {
+			part = strings.TrimSpace(part)
+
 			lowerParts := strings.Split(part, "  ")
 			if(len(lowerParts) > 1) {
-				for i :=0; i < len(lowerParts); i++ {
-					fmt.Println("Part is: ", strings.TrimSpace(lowerParts[i]))
+				for k :=0; k < len(lowerParts); k++ {
+					i.assignStatistic(strings.TrimSpace(lowerParts[k]))
 				}
 			} else {
-				fmt.Println("Part single is: ", strings.TrimSpace(part))
+				i.assignStatistic(strings.TrimSpace(part))
 			}
 		}
+
+		fmt.Println("Item is: ", i)
 
 	} else {
 		fmt.Println("No item data for this page")
 	}
+}
+
+func (i *Item) assignStatistic(part string) {
+	var stat Statistic
+
+	fmt.Println("Assigning part: ", part)
+	if stringutil.CaseInsenstiveContains(part, "lore item", "magic item", "temporary") {
+		stat.code = "affinity"
+		stat.effect = part
+	} else if stringutil.CaseInsenstiveContains(part, "slot:", "class:", "race:", "size:", "skill:") {
+		parts := strings.Split(part, ":")
+		stat.code = strings.TrimSpace(parts[0])
+		stat.effect = strings.TrimSpace(parts[1])
+	} else if stringutil.CaseInsenstiveContains(part, "sv fire:", "sv cold:", "sv poison:", "sv magic:", "sv disease:", "dmg:", "ac:", "hp:", "dex:", "agi:", "sta:", "mana:", "cha:", "atk:", "wis:", "int:", "endr:", "wt:", "atk delay:") {
+		parts := strings.Split(part, ":")
+
+		isPositiveNumber := true
+		if stringutil.CaseInsensitiveIndexOf(parts[1], "+") > -1 {
+			parts[1] = strings.TrimSpace(strings.Replace(parts[1], "+", "", -1))
+			isPositiveNumber = true
+		} else if stringutil.CaseInsensitiveIndexOf(parts[1], "-") > -1 {
+			parts[1] = strings.TrimSpace(strings.Replace(parts[1], "-", "", -1))
+			isPositiveNumber = false
+		}
+
+		stat.code = strings.TrimSpace(parts[0])
+		val, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 32)
+
+		if err != nil {
+			fmt.Println("Stat error: ", err)
+		} else {
+			stat.value = float32(val)
+			if !isPositiveNumber {
+				stat.value *= -1
+			}
+		}
+	} else {
+		fmt.Println("Unkown stat: ", part)
+	}
+
+	if stat.code != "" {
+		i.statistics = append(i.statistics, stat)
+	} else {
+		fmt.Println("Nil stat code for: ", stat)
+	}
+}
+
+// Saves the item to our SQL database
+func (i *Item) Save() {
+
 }

@@ -32,6 +32,8 @@ func (d *Database) Open() bool {
 	return true
 }
 
+// Given a query string and a list of variadic parameters bindings this
+// method will
 func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
 	if d.conn == nil {
 		fmt.Println("Spawning a new connection")

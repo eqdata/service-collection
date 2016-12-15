@@ -91,14 +91,20 @@ func (c *AuctionController) parse(auctions *RawAuctions) {
 		// the log-client is GMT, PST, EST etc.
 		line = parts[1]
 
+		parts[1] = strings.TrimSpace(parts[1])
 
 		// Explode this array so we are left with the seller on the left and items on the right
 		auctionParts := strings.Split(parts[1], "auctions,")
 
 		seller := auctionParts[0]
 
+
 		// Sale data is always encapsulated in single quotes, taking a substring removes these
-		items := strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-1]
+		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
+
+		line = auctionParts[0] + auctionParts[1]
+
+		items := strings.TrimSpace(auctionParts[1])
 		items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
 
 		// Discard the WTB portion of the string
