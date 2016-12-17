@@ -40,9 +40,9 @@ func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
 		d.Open()
 	}
 
-	fmt.Println("Interfaces: ", parameters)
+	LogInDebugMode("Interfaces: ", parameters)
 
-	fmt.Println("Preparing query: " + query)
+	LogInDebugMode("Preparing query: " + query)
 	stmt, err := d.conn.Prepare(query)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -52,18 +52,35 @@ func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
 	if len(parameters) > 0 {
 		rows, err := stmt.Query(parameters...)
 		if err != nil {
-			fmt.Println("Error sending query: ", err)
+			fmt.Println("Error sending query: ", err.Error())
 			return nil
 		}
 		return rows
 	} else {
 		rows, err := stmt.Query()
 		if err != nil {
-			fmt.Println("Error sending query: ", err)
+			fmt.Println("Error sending query: ", err.Error())
 			return nil
 		}
 		return rows
 	}
+}
+
+func (d *Database) Insert(query string, parameters ...interface{}) (int64, error) {
+	res, err := d.conn.Exec(query, parameters...)
+	if err != nil {
+		fmt.Println("Exec err when inserting: ", err.Error())
+	} else {
+		id, err := res.LastInsertId()
+		if err != nil {
+			fmt.Println("Error when fetching last insert id: ", err.Error())
+		} else {
+			LogInDebugMode("returning iD: ", id)
+			return id, nil
+		}
+	}
+
+	return -1, err
 }
 
 func (d *Database) Close() {

@@ -1,6 +1,6 @@
 package main
 
-import "time"
+import "fmt"
 
 /*
  |-------------------------------------------------------------------------
@@ -18,5 +18,8 @@ import "time"
 type Auction struct {
 	seller string
 	items []Item
-	auctioned_at time.Time
+}
+
+func (a *Auction) Save() {
+	fmt.Println("Saving auction for seller: " + a.seller + ", with items: ", a.items)
 }

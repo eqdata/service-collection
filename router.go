@@ -14,9 +14,7 @@ func CreateRouter() *mux.Router {
 
 		handler = route.handler
 
-		if DEBUG {
-			handler = Logger(handler, route.name)
-		}
+		handler = Logger(handler, route.name)
 
 		router.
 			Methods(route.method).

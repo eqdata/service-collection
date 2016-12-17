@@ -10,13 +10,15 @@ import (
 	"strconv"
 	"hash/fnv"
 	"github.com/bradfitz/gomemcache/memcache"
+	"sync"
+	"bytes"
 )
 
 type AuctionController struct {
 	Controller
 }
 
-// Stores auction data to the Amazon RDS storage once it has been parsed
+// Receive a list of auction lines from the Log client
 func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	var auctions RawAuctions
 	if r.Body == nil {
@@ -37,6 +39,8 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	go c.parse(&auctions)
 }
 
+// Gets a unique hash of the auction string and checks if it exists in memcached,
+// if it does we parse the line, else we skip it
 func (c *AuctionController) shouldParse(line *string) bool {
 
 	// Create a 64bit hash key from this string
@@ -46,8 +50,6 @@ func (c *AuctionController) shouldParse(line *string) bool {
 		return h.Sum64()
 	}(*line)
 
-	fmt.Println("The hash is: ", hash)
-
 	// Check memcached to see if it exist
 	mc := memcache.New(MC_HOST + ":" + MC_PORT)
 
@@ -55,11 +57,11 @@ func (c *AuctionController) shouldParse(line *string) bool {
 	_, err := mc.Get(fmt.Sprint(hash))
 	if err != nil {
 		if err.Error() == "memcache: cache miss" {
-			fmt.Println("Setting in cache for: " + fmt.Sprint(CACHE_TIME_IN_SECS) + " seconds")
+			fmt.Println("Setting hash: " + fmt.Sprint(hash) + " in cache for: " + fmt.Sprint(CACHE_TIME_IN_SECS) + " seconds")
 			mc.Set(&memcache.Item{Key: fmt.Sprint(hash), Value: []byte(*line), Expiration: CACHE_TIME_IN_SECS})
 			return true
 		} else {
-			fmt.Println("Error was: ", err)
+			fmt.Println("Error was: ", err.Error())
 			return false
 		}
 	}
@@ -69,18 +71,20 @@ func (c *AuctionController) shouldParse(line *string) bool {
 	return false
 }
 
-// Publishes new auction data to Amazon SQS, this service is responsible
-// for being the publisher in the pub/sub model, the Relay server
-// is the subscriber which streams the data to the consumer via socket.io
-func (c *AuctionController) publish() {
-	fmt.Println("Pushing data to queue system")
-}
+// If we should parse this line, we send a list of items to the Wiki Service
+// and then save unique auction data to the DB here (we do an initial save
+// of the items name and display name here but don't process stats from the wiki)
+func (c *AuctionController) parse(rawAuctions *RawAuctions) {
 
-//
-func (c *AuctionController) parse(auctions *RawAuctions) {
+	var outerWait sync.WaitGroup
+	var auctions []Auction
 
-	for _, line := range auctions.Lines {
+	var itemsForWikiService []string
 
+	for _, line := range rawAuctions.Lines {
+		var auction Auction
+
+		outerWait.Add(1)
 		fmt.Println("Parsing line: ", line)
 
 		// Split the auction string so we have date on the left and auctions on the right
@@ -98,7 +102,6 @@ func (c *AuctionController) parse(auctions *RawAuctions) {
 
 		seller := auctionParts[0]
 
-
 		// Sale data is always encapsulated in single quotes, taking a substring removes these
 		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
 
@@ -113,10 +116,10 @@ func (c *AuctionController) parse(auctions *RawAuctions) {
 			items = items[0:wtbIndex]
 		}
 
-		fmt.Println("Line is now: ", line)
+		LogInDebugMode("Line is now: ", line)
 
 		if !c.shouldParse(&line) {
-			fmt.Println("Can't parse this line")
+			LogInDebugMode("Can't parse this line")
 		} else {
 			// trim any leading/trailing space so that we only explode string list on proper constraints
 			items = strings.TrimSpace(items)
@@ -128,19 +131,68 @@ func (c *AuctionController) parse(auctions *RawAuctions) {
 				return false
 			})
 
-			fmt.Println("Seller is: ", seller)
+			LogInDebugMode("Seller is: ", seller)
 
-			fetchChannel := make(chan bool)
+			var wait sync.WaitGroup
+			itemChannel := make(chan Item)
 			for _, itemName := range itemList {
+				wait.Add(1)
 				itemName = strings.TrimSpace(itemName)
-				fmt.Println("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
+				LogInDebugMode("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
 				item := Item {
 					name: itemName,
 				}
-				go item.FetchData(fetchChannel)
+				go item.FetchData(&wait, itemChannel)
+
+				// Read from the channel when its done
+				raw := <-itemChannel
+				auction.items = append(auction.items, raw)
+				auction.seller = seller
+
+				exists := stringutil.CaseInsensitiveSliceContainsString(itemsForWikiService, raw.name)
+				if !exists {
+					itemsForWikiService = append(itemsForWikiService, raw.name)
+				}
 			}
+
+			// Append to the output array
+			auctions = append(auctions, auction)
+
+			// Wait for all inner work to complete before we process next line
+			wait.Wait()
 		}
+
+		outerWait.Done()
 	}
 
-	//c.publish()
+	outerWait.Wait()
+
+	go c.sendItemsToWikiService(itemsForWikiService)
+	c.publish(auctions)
+}
+
+//
+func (c *AuctionController) sendItemsToWikiService(items []string) {
+	if len(items) > 0 {
+		fmt.Println("Sending items to wiki service: ", items)
+
+		encodedItems, _ := json.Marshal(items)
+		resp, err := http.Post("http://" + WIKI_SERVICE_HOST + ":" + WIKI_SERVICE_PORT + "/items", "application/json", bytes.NewBuffer(encodedItems))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("Response from wiki service: ", resp)
+		}
+	}
+}
+
+// Publishes new auction data to Amazon SQS, this service is responsible
+// for being the publisher in the pub/sub model, the Relay server
+// is the subscriber which streams the data to the consumer via socket.io
+func (c *AuctionController) publish(auctions []Auction) {
+	fmt.Println("Pushing data to queue system: ", auctions)
+
+	for _, auction := range auctions {
+		go auction.Save()
+	}
 }

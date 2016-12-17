@@ -29,8 +29,9 @@ func main() {
 
 	// Initialise router
 	fmt.Println("Starting webserver...")
+	fmt.Println("Listening on port: " + PORT)
 	router := CreateRouter()
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":" + PORT, router))
 }
 
 func cleanup() {
