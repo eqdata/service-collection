@@ -107,7 +107,7 @@ func (i *Item) fetchDataFromSQL() bool {
 		}
 	}
 
-	fmt.Println("No record found for item: ", i.name)
+	LogInDebugMode("No record found in our SQL database for item: ", i.name)
 	return false
 }
 
@@ -118,7 +118,7 @@ func (i *Item) Save() {
 		"(name, displayName)" +
 		"VALUES (?, ?)"
 
-	id, err := DB.Insert(query, i.name, TitleCase(i.name, true))
+	id, err := DB.Insert(query, TitleCase(i.name, false), TitleCase(i.name, true))
 	if err != nil {
 		fmt.Println(err.Error())
 	} else if id == 0 {
