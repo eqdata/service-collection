@@ -27,8 +27,8 @@ func (a *Auction) Save() {
 	fmt.Println("Saving auction for seller: " + a.seller + ", with items: ", a.items)
 
 	if a.seller != "" && len(a.items) > 0 {
-		id := a.GetPlayer()
-		LogInDebugMode("Player: " + strings.Title(a.seller) + " has an id of: " + fmt.Sprint(id))
+		playerId := a.GetPlayer()
+		LogInDebugMode("Player: " + strings.Title(a.seller) + " has an id of: " + fmt.Sprint(playerId))
 
 		// Get the items
 		itemsQuery := "SELECT id FROM items " +
@@ -36,10 +36,15 @@ func (a *Auction) Save() {
 
 		var params []string
 		var prices []float32
+		var quants []int32
 		for _, item := range a.items {
 			itemsQuery += "?,"
 			params = append(params, item.name)
 			prices = append(prices, item.price)
+			if item.quantity == 0 {
+				item.quantity = 1
+			}
+			quants = append(quants, item.quantity)
 		}
 		itemsQuery = itemsQuery[0:len(itemsQuery)-1] + ")"
 
@@ -69,18 +74,23 @@ func (a *Auction) Save() {
 		}
 		fmt.Println("Inserting auction with ids: ", itemIds)
 
-		auctionQuery := "INSERT INTO auctions (player_id, item_id, price) " +
+		auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity) " +
 			" VALUES "
 
 		var auctionParams []interface{}
 		for i, itemId := range itemIds {
-			auctionQuery += "(?, ?, ?),"
-			auctionParams = append(auctionParams, id)
+			auctionQuery += "(?, ?, ?, ?),"
+			auctionParams = append(auctionParams, playerId)
 			auctionParams = append(auctionParams, itemId)
 			auctionParams = append(auctionParams, prices[i])
+			auctionParams = append(auctionParams, quants[i])
 		}
 		auctionQuery = auctionQuery[0:len(auctionQuery)-1]
-		DB.Insert(auctionQuery, auctionParams...)
+		fmt.Println("Query is: ", auctionQuery)
+		fmt.Println("Params are: ", auctionParams)
+		if DB.conn != nil && len(auctionParams) > 0 {
+			DB.Insert(auctionQuery, auctionParams...)
+		}
 	} else {
 		fmt.Println("Can't save this auction, it does not have a player name or it has no items: ", a)
 	}

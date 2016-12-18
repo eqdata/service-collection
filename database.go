@@ -22,7 +22,7 @@ func (d *Database) Open() bool {
 		fmt.Println(err.Error())
 	}
 	d.conn = db
-	d.conn.SetMaxIdleConns(MAX_CONNECTIONS)
+	d.conn.SetMaxOpenConns(MAX_CONNECTIONS)
 
 	// Check that we can ping the DB box as the connection is lazy loaded when we fire the query
 	err = d.conn.Ping()
@@ -36,6 +36,7 @@ func (d *Database) Open() bool {
 // Given a query string and a list of variadic parameters bindings this
 // method will
 func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
+	fmt.Println("running query: ", query)
 	if d.conn == nil {
 		fmt.Println("Spawning a new connection")
 		d.Open()
@@ -72,6 +73,7 @@ func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
 }
 
 func (d *Database) Insert(query string, parameters ...interface{}) (int64, error) {
+	fmt.Println("running insert query: ", query)
 	tx, err := d.conn.Begin()
 	if err != nil {
 		fmt.Println("Error creating transaction: ", err.Error())

@@ -156,6 +156,7 @@ func (i *Item) fetchDataFromSQL() bool {
 			if err != nil {
 				fmt.Println("Scan error: ", err)
 			}
+			DB.CloseRows(rows)
 			return true
 		}
 		DB.CloseRows(rows)
