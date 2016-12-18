@@ -15,6 +15,7 @@ const SQL_USER = "";
 const SQL_PASS = "";
 const SQL_DB   = ""
 
+const MAX_CONNECTIONS = 20
 const PORT = "8080"
 
 // Memcached Config

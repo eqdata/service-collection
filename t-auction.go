@@ -53,7 +53,6 @@ func (a *Auction) Save() {
 		var itemIds []int64
 		if rows != nil {
 			var itemId int64
-			defer rows.Close()
 
 			for rows.Next() {
 				err := rows.Scan(&itemId)
@@ -63,6 +62,10 @@ func (a *Auction) Save() {
 					itemIds = append(itemIds, itemId)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				fmt.Println("ROW ERROR: ", err.Error())
+			}
+			DB.CloseRows(rows)
 		}
 		fmt.Println("Inserting auction with ids: ", itemIds)
 
@@ -97,9 +100,8 @@ func (a *Auction) GetPlayer() int64 {
 		LogInDebugMode("Player already exists with id: " + fmt.Sprint(id))
 		playerQuery = "SELECT id FROM players WHERE name = ?"
 		rows := DB.Query(playerQuery, strings.Title(a.seller))
-		if rows != nil {
-			defer rows.Close()
 
+		if rows != nil {
 			for rows.Next() {
 				err := rows.Scan(&id)
 				if err != nil {
@@ -107,6 +109,10 @@ func (a *Auction) GetPlayer() int64 {
 				}
 			}
 		}
+		if err = rows.Err(); err != nil {
+			fmt.Println("ROW ERROR: ", err.Error())
+		}
+		DB.CloseRows(rows)
 	} else if id > 0 {
 		LogInDebugMode("Created player with id: ", id)
 	}

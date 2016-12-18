@@ -39,6 +39,12 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	go c.parse(&auctions)
 }
 
+func (c *AuctionController) isAuctionLine(line *string) bool {
+	isValid, _ := regexp.MatchString("(\\[)([a-zA-Z0-9: ]+)(] ([A-Za-z]+) ((auction)|(auctions)))", *line)
+	return isValid
+}
+
+
 // Gets a unique hash of the auction string and checks if it exists in memcached,
 // if it does we parse the line, else we skip it
 func (c *AuctionController) shouldParse(line *string) bool {
@@ -77,98 +83,111 @@ func (c *AuctionController) shouldParse(line *string) bool {
 func (c *AuctionController) parse(rawAuctions *RawAuctions) {
 
 	var outerWait sync.WaitGroup
-	var auctions []Auction
-
-	var itemsForWikiService []string
 
 	for _, line := range rawAuctions.Lines {
-		var auction Auction
 
 		outerWait.Add(1)
-		fmt.Println("Parsing line: ", line)
 
-		// Split the auction string so we have date on the left and auctions on the right
-		parts := strings.Split(line, "]")
-
-		// Remove date stamp as this is localized to the users computer, we can't reliably
-		// use this as the auction date time stamp because we can't reliably dictate if
-		// the log-client is GMT, PST, EST etc.
-		line = parts[1]
-
-		parts[1] = strings.TrimSpace(parts[1])
-
-		// Explode this array so we are left with the seller on the left and items on the right
-		auctionParts := strings.Split(parts[1], "auctions,")
-
-		seller := auctionParts[0]
-
-		// Sale data is always encapsulated in single quotes, taking a substring removes these
-		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
-
-		line = auctionParts[0] + auctionParts[1]
-
-		items := strings.TrimSpace(auctionParts[1])
-		items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
-
-		// Discard the WTB portion of the string
-		wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
-		if(wtbIndex > -1) {
-			items = items[0:wtbIndex]
-		}
-
-		LogInDebugMode("Line is now: ", line)
-
-		if !c.shouldParse(&line) {
-			LogInDebugMode("Can't parse this line")
+		if !c.isAuctionLine(&line) {
+			outerWait.Done()
 		} else {
-			// trim any leading/trailing space so that we only explode string list on proper constraints
-			items = strings.TrimSpace(items)
-			itemList := strings.FieldsFunc(items, func(r rune) bool {
-				switch r {
-				case '|', ',', '-', ':', '/', '&':
-					return true;
-				}
-				return false
-			})
+			var auction Auction
 
-			LogInDebugMode("Seller is: ", seller)
+			fmt.Println("Parsing line: ", line)
 
-			var wait sync.WaitGroup
-			itemChannel := make(chan Item)
-			for _, itemName := range itemList {
-				wait.Add(1)
-				itemName = strings.TrimSpace(itemName)
-				LogInDebugMode("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
-				item := Item {
-					name: itemName,
-				}
-				go item.FetchData(&wait, itemChannel)
+			// Split the auction string so we have date on the left and auctions on the right
+			parts := strings.Split(line, "]")
 
-				// Read from the channel when its done
-				raw := <-itemChannel
-				auction.items = append(auction.items, raw)
-				auction.seller = seller
+			// Remove date stamp as this is localized to the users computer, we can't reliably
+			// use this as the auction date time stamp because we can't reliably dictate if
+			// the log-client is GMT, PST, EST etc.
+			line = parts[1]
 
-				exists := stringutil.CaseInsensitiveSliceContainsString(itemsForWikiService, raw.name)
-				if !exists {
-					itemsForWikiService = append(itemsForWikiService, raw.name)
-				}
+			parts[1] = strings.TrimSpace(parts[1])
+
+			// Explode this array so we are left with the seller on the left and items on the right
+			auctionParts := strings.Split(parts[1], "auctions,")
+
+			seller := auctionParts[0]
+
+			// Sale data is always encapsulated in single quotes, taking a substring removes these
+			auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
+
+			line = auctionParts[0] + auctionParts[1]
+
+			items := strings.TrimSpace(auctionParts[1])
+			items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
+
+			// Discard the WTB portion of the string
+			wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
+			if(wtbIndex > -1) {
+				items = items[0:wtbIndex]
 			}
 
-			// Append to the output array
-			auctions = append(auctions, auction)
+			LogInDebugMode("Line is now: ", line)
 
-			// Wait for all inner work to complete before we process next line
-			wait.Wait()
+			if !c.shouldParse(&line) {
+				LogInDebugMode("Can't parse this line")
+			} else {
+				// trim any leading/trailing space so that we only explode string list on proper constraints
+				items = strings.TrimSpace(items)
+				itemList := strings.FieldsFunc(items, func(r rune) bool {
+					switch r {
+					case '|', ',', '-', ':', '/', '&':
+						return true;
+					}
+					return false
+				})
+
+				LogInDebugMode("Seller is: ", seller)
+
+				var wait sync.WaitGroup
+				itemChannel := make(chan Item)
+				var auctions []Auction
+				var itemsForWikiService []string
+				for _, itemName := range itemList {
+					wait.Add(1)
+					// Make sure noone is trying to trade here
+					orIndex := stringutil.CaseInsensitiveIndexOf(itemName, " or")
+					if  orIndex > -1 {
+						itemName = itemName[0:orIndex]
+					}
+					itemName = strings.TrimSpace(itemName)
+					LogInDebugMode("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
+					item := Item {
+						name: itemName,
+					}
+					go item.FetchData(&wait, itemChannel)
+
+					// Read from the channel when its done
+					raw := <-itemChannel
+					auction.items = append(auction.items, raw)
+					auction.seller = seller
+
+					fmt.Println("Parsed item is: ", raw)
+
+					exists := stringutil.CaseInsensitiveSliceContainsString(itemsForWikiService, raw.name)
+					if !exists {
+						itemsForWikiService = append(itemsForWikiService, raw.name)
+					}
+				}
+
+				// Append to the output array
+				auctions = append(auctions, auction)
+				fmt.Println("Appended auction: ", auction)
+
+				// Wait for all inner work to complete before we process next line
+				wait.Wait()
+				go c.publish(auctions)
+				go c.sendItemsToWikiService(itemsForWikiService)
+			}
+
+			outerWait.Done()
 		}
-
-		outerWait.Done()
 	}
 
 	outerWait.Wait()
-
-	go c.sendItemsToWikiService(itemsForWikiService)
-	c.publish(auctions)
+	fmt.Println("Done")
 }
 
 //
@@ -193,6 +212,7 @@ func (c *AuctionController) publish(auctions []Auction) {
 	fmt.Println("Pushing data to queue system: ", auctions)
 
 	for _, auction := range auctions {
-		go auction.Save()
+		a := auction
+		go a.Save()
 	}
 }
