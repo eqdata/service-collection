@@ -36,7 +36,7 @@ func (d *Database) Open() bool {
 // Given a query string and a list of variadic parameters bindings this
 // method will
 func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
-	fmt.Println("running query: ", query)
+	LogInDebugMode("running query: ", query)
 	if d.conn == nil {
 		fmt.Println("Spawning a new connection")
 		d.Open()
@@ -73,7 +73,7 @@ func (d *Database) Query(query string, parameters ...interface{}) *sql.Rows {
 }
 
 func (d *Database) Insert(query string, parameters ...interface{}) (int64, error) {
-	fmt.Println("running insert query: ", query)
+	LogInDebugMode("running insert query: ", query)
 	tx, err := d.conn.Begin()
 	if err != nil {
 		fmt.Println("Error creating transaction: ", err.Error())

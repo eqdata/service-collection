@@ -22,5 +22,6 @@ const PORT = "8080"
 const MC_HOST = "";
 const MC_PORT = "";
 
-const CACHE_TIME_IN_SECS = 60
+const CACHE_TIME_IN_SECS = 60 * 60 * 3 // Prevents other loggers from sending the same/old log data, this lane lives in cache for 3 hours
+const SALE_CACHE_TIME_IN_SECS = 60 * 30
  */

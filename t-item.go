@@ -102,8 +102,6 @@ func (i *Item) getQuantityData() {
 // it and set the price of the item on the struct
 func (i *Item) getPricingData() {
 	// Check if the price is price per unit or combined price
-
-
 	hasPricingData, _ := regexp.MatchString("([a-zA-Z ]+)([0-9]+[pkm]?)", i.name)
 	if hasPricingData {
 		priceData := regexp.MustCompile("[0-9]+[pkm]?").FindAllString(i.name, 1)
