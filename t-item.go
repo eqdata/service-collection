@@ -27,53 +27,53 @@ import (
  */
 
 type Item struct {
-	name string
-	price float32
-	quantity int32
+	Name string
+	Price float32
+	Quantity int32
 }
 
 // Public method to fetch data for this item, in Go public method are
 // capitalised by convention (doesn't actually enforce Public/Private methods in go)
 // this method will call fetchDataFromWiki and fetchDataFromCache where appropriate
 func (i *Item) FetchData(wg *sync.WaitGroup, out chan <- Item) {
-	fmt.Println("Fetching data for item: ", i.name)
+	fmt.Println("Fetching data for item: ", i.Name)
 	i.getQuantityData()
 	i.getPricingData()
 
 
 	if(i.fetchDataFromSQL()) {
-		out <- Item{i.name, i.price, i.quantity}
+		out <- Item{i.Name, i.Price, i.Quantity}
 		wg.Done()
 	} else {
 		i.Save()
 		fmt.Println("All saved up")
-		out <- Item{i.name, i.price, i.quantity}
+		out <- Item{i.Name, i.Price, i.Quantity}
 		wg.Done()
 	}
 }
 
 // Extracts quantity data from the item name
 func (i *Item) getQuantityData() {
-	hasQuantityData, _ := regexp.MatchString("(x ?[0-9]+|[0-9]+ ?x)", i.name)
+	hasQuantityData, _ := regexp.MatchString("(x ?[0-9]+|[0-9]+ ?x)", i.Name)
 	if hasQuantityData {
 		isItemStack := false
-		if stringutil.CaseInsenstiveContains(i.name, " stack", " stack ", "stack ") {
+		if stringutil.CaseInsenstiveContains(i.Name, " stack", " stack ", "stack ") {
 			isItemStack = true
-			i.name = strings.TrimSpace(regexp.MustCompile("(?i)(stack[s]?)").ReplaceAllString(i.name, ""))
-			fmt.Println("Name is now: ", i.name)
+			i.Name = strings.TrimSpace(regexp.MustCompile("(?i)(stack[s]?)").ReplaceAllString(i.Name, ""))
+			fmt.Println("Name is now: ", i.Name)
 		}
 
 		//isPricePerUnit := false
-		if stringutil.CaseInsenstiveContains(i.name, " each", " each ", " per ", " per") {
+		if stringutil.CaseInsenstiveContains(i.Name, " each", " each ", " per ", " per") {
 			//isPricePerUnit = true
-			i.name = strings.TrimSpace(regexp.MustCompile("(?i)(( per[\\s\\n])|( each[\\s\\n])|( ea[\\s\\n]))").ReplaceAllString(i.name, ""))
-			fmt.Println("Name is now: ", i.name)
+			i.Name = strings.TrimSpace(regexp.MustCompile("(?i)(( per[\\s\\n])|( each[\\s\\n])|( ea[\\s\\n]))").ReplaceAllString(i.Name, ""))
+			fmt.Println("Name is now: ", i.Name)
 		}
 
-		quantityData := regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").FindAllString(i.name, 1)
+		quantityData := regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").FindAllString(i.Name, 1)
 		if len(quantityData) > 0 {
 			// Replace the quantity data in item name
-			i.name = strings.TrimSpace(regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").ReplaceAllString(i.name, ""))
+			i.Name = strings.TrimSpace(regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").ReplaceAllString(i.Name, ""))
 
 			// Remove all non numeric characters so we can get the qty
 			fmt.Println("Quantity is: ", quantityData[0])
@@ -82,9 +82,9 @@ func (i *Item) getQuantityData() {
 			quantity, err := strconv.ParseFloat(quantityData[0], 32)
 			if err == nil {
 				if isItemStack {
-					i.quantity = int32(quantity * 20)
+					i.Quantity = int32(quantity * 20)
 				} else {
-					i.quantity = int32(quantity)
+					i.Quantity = int32(quantity)
 				}
 			} else {
 				panic(err)
@@ -93,7 +93,7 @@ func (i *Item) getQuantityData() {
 			fmt.Println("Item is now: ", i)
 		}
 	} else {
-		i.quantity = 1
+		i.Quantity = 1
 	}
 }
 
@@ -102,12 +102,12 @@ func (i *Item) getQuantityData() {
 // it and set the price of the item on the struct
 func (i *Item) getPricingData() {
 	// Check if the price is price per unit or combined price
-	hasPricingData, _ := regexp.MatchString("([a-zA-Z ]+)([0-9]+[pkm]?)", i.name)
+	hasPricingData, _ := regexp.MatchString("([a-zA-Z ]+)([0-9]+[pkm]?)", i.Name)
 	if hasPricingData {
-		priceData := regexp.MustCompile("[0-9]+[pkm]?").FindAllString(i.name, 1)
+		priceData := regexp.MustCompile("[0-9]+[pkm]?").FindAllString(i.Name, 1)
 		if len(priceData) > 0 {
 			fmt.Println("Price data is: ", priceData)
-			priceIndex := stringutil.CaseInsensitiveIndexOf(i.name, priceData[len(priceData)-1])
+			priceIndex := stringutil.CaseInsensitiveIndexOf(i.Name, priceData[len(priceData)-1])
 			if(priceIndex > -1) {
 				var modifier float32 = 1.0
 				// trim and get the last character so we can check the modifier
@@ -119,10 +119,10 @@ func (i *Item) getPricingData() {
 				}
 				priceData[0] = regexp.MustCompile("[^0-9.]").ReplaceAllString(priceData[0], "")
 
-				i.name = TitleCase(strings.TrimSpace(i.name[0:priceIndex]), false)
+				i.Name = TitleCase(strings.TrimSpace(i.Name[0:priceIndex]), false)
 				price, err := strconv.ParseFloat(priceData[len(priceData)-1], 32)
 				if err == nil {
-					i.price = float32(price) * modifier
+					i.Price = float32(price) * modifier
 				} else {
 					panic(err)
 				}
@@ -146,7 +146,7 @@ func (i *Item) fetchDataFromSQL() bool {
 		"WHERE name = ? " +
 		"OR displayName = ?"
 
-	rows := DB.Query(query, i.name, i.name)
+	rows := DB.Query(query, i.Name, i.Name)
 	if rows != nil {
 		for rows.Next() {
 			err := rows.Scan(&name)
@@ -160,25 +160,25 @@ func (i *Item) fetchDataFromSQL() bool {
 		DB.CloseRows(rows)
 	}
 
-	LogInDebugMode("No record found in our SQL database for item: ", i.name)
+	LogInDebugMode("No record found in our SQL database for item: ", i.Name)
 	return false
 }
 
 // Very basic save functionality to save item to DB, main save will be done
 // inside of the Wiki parser
 func (i *Item) Save() {
-	if i.name != "" {
+	if i.Name != "" {
 		query := "INSERT IGNORE INTO items" +
 			"(name, displayName)" +
 			"VALUES (?, ?)"
 
-		id, err := DB.Insert(query, TitleCase(i.name, false), TitleCase(i.name, true))
+		id, err := DB.Insert(query, TitleCase(i.Name, false), TitleCase(i.Name, true))
 		if err != nil {
 			fmt.Println(err.Error())
 		} else if id == 0 {
 			fmt.Println("Item already exists")
 		} else if id > 0 {
-			fmt.Println("Successfully created item: " + i.name + " with id: ", id)
+			fmt.Println("Successfully created item: " + i.Name + " with id: ", id)
 		}
 	}
 }

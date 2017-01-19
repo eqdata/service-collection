@@ -8,6 +8,16 @@ const DEBUG = true
 
 const WIKI_BASE_URL string = "http://wiki.project1999.com"
 
+// Wiki service to forward requests for saving item data
+const WIKI_SERVICE_HOST = "localhost"
+const WIKI_SERVICE_PORT = "8081"
+
+const GATEKEEPER_SERVICE_HOST = "localhost"
+const GATEKEEPER_SERVICE_PORT = "8085"
+
+const RELAY_SERVICE_HOST = "localhost"
+const RELAY_SERVICE_PORT = "3000"
+
 // SQL DB Config
 const SQL_HOST = "";
 const SQL_PORT = "";
