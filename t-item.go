@@ -6,7 +6,7 @@ import (
 	"github.com/alexmk92/stringutil"
 	"regexp"
 	"strconv"
-	"sync"
+	//"sync"
 )
 
 /*
@@ -30,25 +30,26 @@ type Item struct {
 	Name string
 	Price float32
 	Quantity int32
+	id int64
 }
 
 // Public method to fetch data for this item, in Go public method are
 // capitalised by convention (doesn't actually enforce Public/Private methods in go)
 // this method will call fetchDataFromWiki and fetchDataFromCache where appropriate
-func (i *Item) FetchData(wg *sync.WaitGroup, out chan <- Item) {
+func (i *Item) FetchData(callback func(Item)) {
 	fmt.Println("Fetching data for item: ", i.Name)
 	i.getQuantityData()
 	i.getPricingData()
 
 
 	if(i.fetchDataFromSQL()) {
-		out <- Item{i.Name, i.Price, i.Quantity}
-		wg.Done()
+		callback(Item{i.Name, i.Price, i.Quantity, i.id})
+		//wg.Done()
 	} else {
 		i.Save()
 		fmt.Println("All saved up")
-		out <- Item{i.Name, i.Price, i.Quantity}
-		wg.Done()
+		callback(Item{i.Name, i.Price, i.Quantity, i.id})
+		//wg.Done()
 	}
 }
 
@@ -102,25 +103,28 @@ func (i *Item) getQuantityData() {
 // it and set the price of the item on the struct
 func (i *Item) getPricingData() {
 	// Check if the price is price per unit or combined price
-	hasPricingData, _ := regexp.MatchString("([a-zA-Z ]+)([0-9]+[pkm]?)", i.Name)
+	hasPricingData, _ := regexp.MatchString("([a-zA-Z ]+)([0-9]+(.[0-9]+)?[pkm]?)", i.Name)
 	if hasPricingData {
-		priceData := regexp.MustCompile("[0-9]+[pkm]?").FindAllString(i.Name, 1)
+		priceData := regexp.MustCompile("([0-9]+([.0-9]+)?[pkm]?)").FindAllString(i.Name, -1)
 		if len(priceData) > 0 {
 			fmt.Println("Price data is: ", priceData)
-			priceIndex := stringutil.CaseInsensitiveIndexOf(i.Name, priceData[len(priceData)-1])
+			fmt.Println(priceData[0])
+			var itemIndex = len(priceData)-1
+			priceIndex := stringutil.CaseInsensitiveIndexOf(i.Name, priceData[itemIndex])
 			if(priceIndex > -1) {
 				var modifier float32 = 1.0
 				// trim and get the last character so we can check the modifier
-				compare := strings.ToLower(strings.TrimSpace(priceData[0])[len(priceData[0])-1:len(priceData[0])])
+				compare := strings.ToLower(strings.TrimSpace(priceData[itemIndex])[len(priceData[itemIndex])-1:len(priceData[itemIndex])])
+				fmt.Println("Compare is: ", compare)
 				if compare == "k" {
 					modifier = 1000.0
 				} else if compare == "m" {
 					modifier = 1000000.0
 				}
-				priceData[0] = regexp.MustCompile("[^0-9.]").ReplaceAllString(priceData[0], "")
+				priceData[itemIndex] = regexp.MustCompile("[^0-9.]").ReplaceAllString(priceData[itemIndex], "")
 
 				i.Name = TitleCase(strings.TrimSpace(i.Name[0:priceIndex]), false)
-				price, err := strconv.ParseFloat(priceData[len(priceData)-1], 32)
+				price, err := strconv.ParseFloat(priceData[itemIndex], 32)
 				if err == nil {
 					i.Price = float32(price) * modifier
 				} else {

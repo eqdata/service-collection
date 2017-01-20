@@ -23,17 +23,18 @@ import (
 type Auction struct {
 	Seller string
 	Items []Item
+	raw string
 }
 
 func (a *Auction) Save() {
-	fmt.Println("Saving auction for seller: " + a.Seller + ", with items: ", a.Items)
+	fmt.Println("Saving auction for seller: " + a.Seller + ", with " + fmt.Sprint(len(a.Items)) + " items.")
 
 	if a.Seller != "" && len(a.Items) > 0 {
 		playerId := a.GetPlayer()
 		LogInDebugMode("Player: " + strings.Title(a.Seller) + " has an id of: " + fmt.Sprint(playerId))
 
 		// Get the items
-		itemsQuery := "SELECT id FROM items " +
+		itemsQuery := "SELECT id, name FROM items " +
 			"WHERE name IN ("
 
 		var params []string
@@ -48,7 +49,7 @@ func (a *Auction) Save() {
 			}
 			quants = append(quants, item.Quantity)
 		}
-		itemsQuery = itemsQuery[0:len(itemsQuery)-1] + ")"
+		itemsQuery = itemsQuery[0:len(itemsQuery)-1] + ")" // remove the last ','
 
 		// convert []string to []interface for query
 		convertedParams := make([]interface{}, len(params))
@@ -57,16 +58,21 @@ func (a *Auction) Save() {
 		}
 
 		rows := DB.Query(itemsQuery, convertedParams...)
-		var itemIds []int64
 		if rows != nil {
 			var itemId int64
+			var name string
 
 			for rows.Next() {
-				err := rows.Scan(&itemId)
+				err := rows.Scan(&itemId, &name)
 				if err != nil {
 					fmt.Println("Scan error: ", err)
 				} else {
-					itemIds = append(itemIds, itemId)
+					for i, item := range a.Items {
+						if strings.TrimSpace(item.Name) == name {
+							a.Items[i].id = itemId
+							fmt.Println("Equal, setting id to: " + fmt.Sprint(itemId), item)
+						}
+					}
 				}
 			}
 			if err := rows.Err(); err != nil {
@@ -74,24 +80,21 @@ func (a *Auction) Save() {
 			}
 			DB.CloseRows(rows)
 		}
-		LogInDebugMode("Inserting auction with ids: ", itemIds)
 
 		auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity) " +
 			" VALUES "
 
 		var auctionParams []interface{}
-		for i, itemId := range itemIds {
-			if !a.itemRecentlyAuctionedByPlayer(itemId, prices[i], quants[i]) {
+		for i, item := range a.Items {
+			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) {
 				auctionQuery += "(?, ?, ?, ?),"
 				auctionParams = append(auctionParams, playerId)
-				auctionParams = append(auctionParams, itemId)
+				auctionParams = append(auctionParams, item.id)
 				auctionParams = append(auctionParams, prices[i])
 				auctionParams = append(auctionParams, quants[i])
 			}
 		}
 		auctionQuery = auctionQuery[0:len(auctionQuery)-1]
-		LogInDebugMode("Query is: ", auctionQuery)
-		LogInDebugMode("Params are: ", auctionParams)
 		if DB.conn != nil && len(auctionParams) > 0 {
 			DB.Insert(auctionQuery, auctionParams...)
 		}
@@ -112,12 +115,12 @@ func (a *Auction) itemRecentlyAuctionedByPlayer(itemId int64, price float32, qua
 
 	// Use an _ as we don't need to use the cache item returned
 	key := strings.TrimSpace("sale:" + strconv.FormatInt(itemId, 10) + ":player:" + a.Seller)
-	fmt.Println("Key is: ", key)
+	//fmt.Println("Key is: ", key)
 	mcItem, err := mc.Get(key)
 	if err != nil {
 		if err.Error() == "memcache: cache miss" {
-			fmt.Println("Couldn't find item in the cache")
-			fmt.Println("Setting item: " + key + " in cache for: " + fmt.Sprint(SALE_CACHE_TIME_IN_SECS) + " seconds")
+			//fmt.Println("Couldn't find item in the cache")
+			LogInDebugMode("Setting item: " + key + " in cache for: " + fmt.Sprint(SALE_CACHE_TIME_IN_SECS) + " seconds")
 			mc.Set(&memcache.Item{Key: fmt.Sprint(key), Value: s.serialize(), Expiration: SALE_CACHE_TIME_IN_SECS})
 			return false
 		} else {

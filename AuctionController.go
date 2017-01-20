@@ -49,8 +49,6 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("apiKey", apiKey)
 	req.Header.Set("email", email)
 
-	fmt.Print("Sending req: ", req)
-
 	var client = &http.Client {
 		Timeout: time.Second * 10,
 	}
@@ -140,114 +138,126 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName string
 	for _, line := range rawAuctions.Lines {
 
 		outerWait.Add(1)
+		go c.parseLine(line, characterName, &outerWait)
 
-		if !c.isAuctionLine(&line) {
-			outerWait.Done()
-		} else {
-			var auction Auction
+	}
 
-			fmt.Println("Parsing line: ", line)
+	outerWait.Wait()
+	fmt.Println("Processed all lines")
+}
 
-			// Split the auction string so we have date on the left and auctions on the right
-			parts := strings.Split(line, "]")
+func (c *AuctionController) parseLine(line string, characterName string, wg *sync.WaitGroup) {
+	if !c.isAuctionLine(&line) {
+		wg.Done()
+	} else {
+		var auctions []Auction
+		var auction Auction
 
-			// Remove date stamp as this is localized to the users computer, we can't reliably
-			// use this as the auction date time stamp because we can't reliably dictate if
-			// the log-client is GMT, PST, EST etc.
-			line = parts[1]
+		fmt.Println("Parsing line: ", line)
 
-			parts[1] = strings.TrimSpace(parts[1])
-			parts[1] = strings.Replace(parts[1], "You auction", (characterName + " auctions"), -1)
+		// Split the auction string so we have date on the left and auctions on the right
+		parts := strings.Split(line, "]")
 
-			// Explode this array so we are left with the seller on the left and items on the right
-			auctionParts := strings.Split(parts[1], "auctions,")
+		// Remove date stamp as this is localized to the users computer, we can't reliably
+		// use this as the auction date time stamp because we can't reliably dictate if
+		// the log-client is GMT, PST, EST etc.
+		line = parts[1]
 
-			seller := auctionParts[0]
+		parts[1] = strings.TrimSpace(parts[1])
+		parts[1] = strings.Replace(parts[1], "You auction", (characterName + " auctions"), -1)
 
-			// Sale data is always encapsulated in single quotes, taking a substring removes these
-			auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
+		auction.raw = parts[1]
 
-			line = auctionParts[0] + auctionParts[1]
+		// Explode this array so we are left with the seller on the left and items on the right
+		auctionParts := strings.Split(parts[1], "auctions,")
 
-			items := strings.TrimSpace(auctionParts[1])
-			items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
+		seller := auctionParts[0]
 
-			// Discard the WTB portion of the string
-			wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
-			if(wtbIndex > -1) {
-				items = items[0:wtbIndex]
+		// Sale data is always encapsulated in single quotes, taking a substring removes these
+		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
+
+		line = auctionParts[0] + auctionParts[1]
+
+		items := strings.TrimSpace(auctionParts[1])
+		items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
+
+		// Discard the WTB portion of the string
+		wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
+		if(wtbIndex > -1) {
+			items = items[0:wtbIndex]
+		}
+
+		LogInDebugMode("Line is now: ", line)
+
+		// trim any leading/trailing space so that we only explode string list on proper constraints
+		items = strings.TrimSpace(items)
+
+		fmt.Println("Items pre split: ", items);
+		re := regexp.MustCompile(`(?i)wts|wtb|pst`)
+		items = re.ReplaceAllString(items, "")
+		re = regexp.MustCompile("((Spell: )?(([A-Z]{1,2}|(of|or|the|VP)?)[a-z]+[\\`']{0,1}[a-z]([-][a-z]+)?( {0,1})([I]{1,3})?)+([0-9]+(.[0-9]+)?[pkm]?)?|,-\\/&:)([\\d\\D]{1,3}(stacks|stack)){0,1}")
+		itemList := re.FindAllString(items, -1)
+		fmt.Println("Items after split: ", itemList)
+
+		if !c.shouldParse(&line) {
+			// If we can't parse then just append it to the relay server (could be the same  message)
+			// dont do this yet, there is probably a better way of handling this!
+			LogInDebugMode("Can't parse this line")
+			/*
+			for _, itemName := range itemList {
+				var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
+				auction.Items = append(auction.Items, item)
 			}
+			auctions = append(auctions, auction)
+			go c.publish(auctions, false)
+			*/
+		} else {
+			LogInDebugMode("Seller is: ", seller)
 
-			LogInDebugMode("Line is now: ", line)
-
-			if !c.shouldParse(&line) {
-				LogInDebugMode("Can't parse this line")
-			} else {
-				// trim any leading/trailing space so that we only explode string list on proper constraints
-				items = strings.TrimSpace(items)
-				itemList := strings.FieldsFunc(items, func(r rune) bool {
-					switch r {
-					case '|', ',', '-', ':', '/', '&':
-						return true;
-					}
-					return false
-				})
-
-				LogInDebugMode("Seller is: ", seller)
-
-				var wait sync.WaitGroup
-				itemChannel := make(chan Item)
-				var auctions []Auction
-				var itemsForWikiService []string
-				for _, itemName := range itemList {
-					wait.Add(1)
-					// Make sure noone is trying to trade here
-					orIndex := stringutil.CaseInsensitiveIndexOf(itemName, " or")
-					if  orIndex > -1 {
-						itemName = itemName[0:orIndex]
-					}
-					itemName = strings.TrimSpace(itemName)
-					LogInDebugMode("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
-					item := Item {
-						Name: itemName,
-					}
-					go item.FetchData(&wait, itemChannel)
-
-					// Read from the channel when its done
-					raw := <-itemChannel
+			var wait sync.WaitGroup
+			var itemsForWikiService []string
+			for _, itemName := range itemList {
+				wait.Add(1)
+				// Make sure noone is trying to trade here
+				orIndex := stringutil.CaseInsensitiveIndexOf(itemName, " or")
+				if  orIndex > -1 {
+					itemName = itemName[0:orIndex]
+				}
+				itemName = strings.TrimSpace(itemName)
+				LogInDebugMode("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
+				item := Item {
+					Name: itemName,
+				}
+				go item.FetchData(func(raw Item) {
 					auction.Items = append(auction.Items, raw)
 					auction.Seller = seller
 
 					fmt.Println("Parsed item is: ", raw)
-
 					exists := stringutil.CaseInsensitiveSliceContainsString(itemsForWikiService, raw.Name)
 					if !exists {
 						itemsForWikiService = append(itemsForWikiService, raw.Name)
 					}
-				}
-
-				// Append to the output array
-				auctions = append(auctions, auction)
-				fmt.Println("Appended auction: ", auction)
-
-				// Wait for all inner work to complete before we process next line
-				wait.Wait()
-				go c.publish(auctions)
-				go c.sendItemsToWikiService(itemsForWikiService)
+					wait.Done()
+					wg.Done()
+				})
 			}
 
-			outerWait.Done()
+			// Wait for all inner work to complete before we process next line
+			wait.Wait()
+			go c.saveAuctionData(auctions)
+			go c.sendItemsToWikiService(itemsForWikiService)
+
+			// Append to the output array and send it to the web front end (batching updates looks slow)
+			auctions = append(auctions, auction)
+			go c.publishToRelayService(auction)
 		}
 	}
-
-	outerWait.Wait()
-	fmt.Println("Done")
 }
 
 //
 func (c *AuctionController) sendItemsToWikiService(items []string) {
 	if len(items) > 0 {
-		fmt.Println("Sending items to wiki service: ", items)
+		fmt.Println("Sending: " + fmt.Sprint(len(items)) + " items to wiki service.")
 
 		encodedItems, _ := json.Marshal(items)
 		resp, err := http.Post("http://" + WIKI_SERVICE_HOST + ":" + WIKI_SERVICE_PORT + "/items", "application/json", bytes.NewBuffer(encodedItems))
@@ -262,29 +272,30 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 // Publishes new auction data to Amazon SQS, this service is responsible
 // for being the publisher in the pub/sub model, the Relay server
 // is the subscriber which streams the data to the consumer via socket.io
-func (c *AuctionController) publish(auctions []Auction) {
+func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
 	for _, auction := range auctions {
 		a := auction
 		go a.Save()
 	}
+}
 
+func (c *AuctionController) publishToRelayService(auction Auction) {
 	// Push to our Websocket server
-	fmt.Println("Pushing data to queue system: ", auctions)
+	fmt.Println("Pushing: " + fmt.Sprint(len(auction.Items)) + " items in this auction to relay server.")
 
 	// Serialize to JSON to pass to the Relay server
-	sa := SerializedAuctions{AuctionLines: auctions}
+	sa := SerializedAuction{AuctionLine: auction}
 	req, err := http.NewRequest("POST", "http://" + RELAY_SERVICE_HOST + ":" + RELAY_SERVICE_PORT + "/auctions", bytes.NewBuffer(sa.toJSONString()))
 	if err != nil {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	fmt.Print("Sending req: ", req)
+	//fmt.Print("Sending req: ", req)
 
 	var client = &http.Client {
 		Timeout: time.Second * 10,
 	}
 	resp, err := client.Do(req)
 	defer resp.Body.Close()
-
 }
