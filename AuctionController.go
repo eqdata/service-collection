@@ -320,7 +320,7 @@ func (c *AuctionController) publishToRelayService(auction Auction) {
 
 	// Serialize to JSON to pass to the Relay server
 	sa := SerializedAuction{AuctionLine: auction}
-	req, err := http.NewRequest("POST", "http://" + RELAY_SERVICE_HOST + ":" + RELAY_SERVICE_PORT + "/auctions", bytes.NewBuffer(sa.toJSONString()))
+	req, err := http.NewRequest("POST", "http://" + RELAY_SERVICE_HOST + ":" + RELAY_SERVICE_PORT + "/auctions/" + strings.ToLower(auction.Server), bytes.NewBuffer(sa.toJSONString()))
 	if err != nil {
 		return
 	}
