@@ -282,7 +282,7 @@ func (c *AuctionController) saveAuctionData(auctions []Auction) {
 
 func (c *AuctionController) publishToRelayService(auction Auction) {
 	// Push to our Websocket server
-	fmt.Println("Pushing: " + fmt.Sprint(len(auction.Items)) + " items in this auction to relay server.")
+	fmt.Println("Pushing: " + fmt.Sprint(len(auction.Items)) + " items in this auction to relay server.", auctions)
 
 	// Serialize to JSON to pass to the Relay server
 	sa := SerializedAuction{AuctionLine: auction}
