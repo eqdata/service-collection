@@ -211,6 +211,7 @@ func (c *AuctionController) parseLine(line string, characterName string, wg *syn
 			auctions = append(auctions, auction)
 			go c.publish(auctions, false)
 			*/
+			wg.Done()
 		} else {
 			LogInDebugMode("Seller is: ", seller)
 
