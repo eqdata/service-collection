@@ -239,7 +239,7 @@ func (c *AuctionController) parseLine(line string, characterName string, wg *syn
 						itemsForWikiService = append(itemsForWikiService, raw.Name)
 					}
 
-					wg.Done()
+					wait.Done()
 				})
 			}
 
