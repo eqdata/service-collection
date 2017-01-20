@@ -229,7 +229,7 @@ func (c *AuctionController) parseLine(line string, characterName string, wg *syn
 				item := Item {
 					Name: itemName,
 				}
-				go item.FetchData(func(raw Item) {
+				go item.FetchData(&wait, func(raw Item) {
 					auction.Items = append(auction.Items, raw)
 					auction.Seller = seller
 
@@ -238,13 +238,12 @@ func (c *AuctionController) parseLine(line string, characterName string, wg *syn
 					if !exists {
 						itemsForWikiService = append(itemsForWikiService, raw.Name)
 					}
-					wait.Done()
-					wg.Done()
 				})
 			}
 
 			// Wait for all inner work to complete before we process next line
 			wait.Wait()
+			wg.Done()
 			go c.saveAuctionData(auctions)
 			go c.sendItemsToWikiService(itemsForWikiService)
 
