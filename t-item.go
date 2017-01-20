@@ -36,7 +36,7 @@ type Item struct {
 // capitalised by convention (doesn't actually enforce Public/Private methods in go)
 // this method will call fetchDataFromWiki and fetchDataFromCache where appropriate
 func (i *Item) FetchData(callback func(Item)) {
-	fmt.Println("Fetching data for item: ", i.Name)
+	LogInDebugMode("Fetching data for item: ", i.Name)
 	i.getQuantityData()
 	i.getPricingData()
 
@@ -45,7 +45,7 @@ func (i *Item) FetchData(callback func(Item)) {
 		callback(Item{i.Name, i.Price, i.Quantity, i.id})
 	} else {
 		i.Save()
-		fmt.Println("All saved up")
+		LogInDebugMode("All saved up")
 		callback(Item{i.Name, i.Price, i.Quantity, i.id})
 	}
 }
@@ -58,14 +58,14 @@ func (i *Item) getQuantityData() {
 		if stringutil.CaseInsenstiveContains(i.Name, " stack", " stack ", "stack ") {
 			isItemStack = true
 			i.Name = strings.TrimSpace(regexp.MustCompile("(?i)(stack[s]?)").ReplaceAllString(i.Name, ""))
-			fmt.Println("Name is now: ", i.Name)
+			LogInDebugMode("Name is now: ", i.Name)
 		}
 
 		//isPricePerUnit := false
 		if stringutil.CaseInsenstiveContains(i.Name, " each", " each ", " per ", " per") {
 			//isPricePerUnit = true
 			i.Name = strings.TrimSpace(regexp.MustCompile("(?i)(( per[\\s\\n])|( each[\\s\\n])|( ea[\\s\\n]))").ReplaceAllString(i.Name, ""))
-			fmt.Println("Name is now: ", i.Name)
+			LogInDebugMode("Name is now: ", i.Name)
 		}
 
 		quantityData := regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").FindAllString(i.Name, 1)
@@ -74,7 +74,7 @@ func (i *Item) getQuantityData() {
 			i.Name = strings.TrimSpace(regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").ReplaceAllString(i.Name, ""))
 
 			// Remove all non numeric characters so we can get the qty
-			fmt.Println("Quantity is: ", quantityData[0])
+			LogInDebugMode("Quantity is: ", quantityData[0])
 			quantityData[0] = regexp.MustCompile("[^0-9.]").ReplaceAllString(quantityData[0], "")
 
 			quantity, err := strconv.ParseFloat(quantityData[0], 32)
@@ -88,7 +88,7 @@ func (i *Item) getQuantityData() {
 				panic(err)
 			}
 
-			fmt.Println("Item is now: ", i)
+			LogInDebugMode("Item is now: ", i)
 		}
 	} else {
 		i.Quantity = 1
@@ -104,15 +104,12 @@ func (i *Item) getPricingData() {
 	if hasPricingData {
 		priceData := regexp.MustCompile("([0-9]+([.0-9]+)?[pkm]?)").FindAllString(i.Name, -1)
 		if len(priceData) > 0 {
-			fmt.Println("Price data is: ", priceData)
-			fmt.Println(priceData[0])
 			var itemIndex = len(priceData)-1
 			priceIndex := stringutil.CaseInsensitiveIndexOf(i.Name, priceData[itemIndex])
 			if(priceIndex > -1) {
 				var modifier float32 = 1.0
 				// trim and get the last character so we can check the modifier
 				compare := strings.ToLower(strings.TrimSpace(priceData[itemIndex])[len(priceData[itemIndex])-1:len(priceData[itemIndex])])
-				fmt.Println("Compare is: ", compare)
 				if compare == "k" {
 					modifier = 1000.0
 				} else if compare == "m" {
@@ -128,7 +125,6 @@ func (i *Item) getPricingData() {
 					panic(err)
 				}
 			}
-
 			LogInDebugMode("Item is now: ", i)
 		}
 	}
@@ -151,7 +147,6 @@ func (i *Item) fetchDataFromSQL() bool {
 	if rows != nil {
 		for rows.Next() {
 			err := rows.Scan(&name)
-			fmt.Println("NAME IS: ", name)
 			if err != nil {
 				fmt.Println("Scan error: ", err)
 			}
@@ -177,7 +172,7 @@ func (i *Item) Save() {
 		if err != nil {
 			fmt.Println(err.Error())
 		} else if id == 0 {
-			fmt.Println("Item already exists")
+			LogInDebugMode("Item already exists")
 		} else if id > 0 {
 			fmt.Println("Successfully created item: " + i.Name + " with id: ", id)
 		}

@@ -23,11 +23,12 @@ import (
 type Auction struct {
 	Seller string
 	Items []Item
+	Server string
 	raw string
 }
 
-func (a *Auction) Save() {
-	fmt.Println("Saving auction for seller: " + a.Seller + ", with " + fmt.Sprint(len(a.Items)) + " items.")
+func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) {
+	//fmt.Println("Saving auction for seller: " + a.Seller + ", with " + fmt.Sprint(len(a.Items)) + " items.")
 
 	if a.Seller != "" && len(a.Items) > 0 {
 		playerId := a.GetPlayer()
@@ -42,7 +43,7 @@ func (a *Auction) Save() {
 		var quants []int32
 		for _, item := range a.Items {
 			itemsQuery += "?,"
-			params = append(params, item.Name)
+			params = append(params, strings.TrimSpace(item.Name))
 			prices = append(prices, item.Price)
 			if item.Quantity == 0 {
 				item.Quantity = 1
@@ -57,6 +58,9 @@ func (a *Auction) Save() {
 			convertedParams[i] = v
 		}
 
+		//fmt.Println(convertedParams)
+		//fmt.Println(itemsQuery)
+
 		rows := DB.Query(itemsQuery, convertedParams...)
 		if rows != nil {
 			var itemId int64
@@ -68,9 +72,10 @@ func (a *Auction) Save() {
 					fmt.Println("Scan error: ", err)
 				} else {
 					for i, item := range a.Items {
+						//fmt.Println("Checking if: " + item.Name + " is equal to: " + name)
 						if strings.TrimSpace(item.Name) == name {
 							a.Items[i].id = itemId
-							fmt.Println("Equal, setting id to: " + fmt.Sprint(itemId), item)
+							LogInDebugMode("Item: " + item.Name + " is equal to: " + name + " setting id to: " + fmt.Sprint(itemId))
 						}
 					}
 				}
@@ -81,25 +86,30 @@ func (a *Auction) Save() {
 			DB.CloseRows(rows)
 		}
 
-		auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity) " +
-			" VALUES "
+		auctionQuery := ""
 
 		var auctionParams []interface{}
 		for i, item := range a.Items {
-			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) {
-				auctionQuery += "(?, ?, ?, ?),"
+			LogInDebugMode("Checking item: ", item.Name + " for seller: " + a.Seller)
+			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) && item.id > 0 {
+				auctionQuery += "(?, ?, ?, ?, ?),"
 				auctionParams = append(auctionParams, playerId)
 				auctionParams = append(auctionParams, item.id)
 				auctionParams = append(auctionParams, prices[i])
 				auctionParams = append(auctionParams, quants[i])
+				auctionParams = append(auctionParams, a.Server)
+			} else if item.id <= 0 {
+				LogInDebugMode("Item: ", item.Name + " does not have an id :(")
+			} else {
+				LogInDebugMode("Item: ", item.Name + " was recently sold")
 			}
 		}
-		auctionQuery = auctionQuery[0:len(auctionQuery)-1]
-		if DB.conn != nil && len(auctionParams) > 0 {
-			DB.Insert(auctionQuery, auctionParams...)
-		}
+
+		callback(auctionQuery, auctionParams)
+
 	} else {
-		fmt.Println("Can't save this auction, it does not have a player name or it has no items: ", a)
+		LogInDebugMode("Can't save this auction, it does not have a player name or it has no items: ", a)
+		callback("", nil)
 	}
 
 }
@@ -114,7 +124,7 @@ func (a *Auction) itemRecentlyAuctionedByPlayer(itemId int64, price float32, qua
 	mc := memcache.New(MC_HOST + ":" + MC_PORT)
 
 	// Use an _ as we don't need to use the cache item returned
-	key := strings.TrimSpace("sale:" + strconv.FormatInt(itemId, 10) + ":player:" + a.Seller)
+	key := strings.TrimSpace("server:" + a.Server + ":sale:" + strconv.FormatInt(itemId, 10) + ":player:" + a.Seller)
 	//fmt.Println("Key is: ", key)
 	mcItem, err := mc.Get(key)
 	if err != nil {
@@ -133,11 +143,13 @@ func (a *Auction) itemRecentlyAuctionedByPlayer(itemId int64, price float32, qua
 		s = s.deserialize(mcItem.Value)
 
 		if s.Price == price {
-			fmt.Println("The prices haven't changed so we will not insert for id: ", itemId)
+			LogInDebugMode("The prices haven't changed so we will not insert for id: ", itemId)
 			return true
 		}
 
-		fmt.Println("The old price of: " + fmt.Sprint(s.Price) + " is different to: " + fmt.Sprint(price) + " busting the cache!")
+		LogInDebugMode("The old price of: " + fmt.Sprint(s.Price) + " is different to: " + fmt.Sprint(price) + " busting the cache!")
+		s.Price = price
+		mc.Replace(&memcache.Item{Key: fmt.Sprint(key), Value: s.serialize(), Expiration: SALE_CACHE_TIME_IN_SECS})
 		return false
 	}
 

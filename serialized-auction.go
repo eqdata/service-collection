@@ -41,7 +41,5 @@ func (s *SerializedAuction) toJSONString() []byte {
 	outputString += `{ "line" : "` + s.AuctionLine.raw + `" }`
 	outputString += "] }"
 
-	fmt.Println(outputString)
-
 	return []byte(outputString)
 }
