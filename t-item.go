@@ -6,8 +6,6 @@ import (
 	"github.com/alexmk92/stringutil"
 	"regexp"
 	"strconv"
-	//"sync"
-	"sync"
 )
 
 /*
@@ -37,7 +35,7 @@ type Item struct {
 // Public method to fetch data for this item, in Go public method are
 // capitalised by convention (doesn't actually enforce Public/Private methods in go)
 // this method will call fetchDataFromWiki and fetchDataFromCache where appropriate
-func (i *Item) FetchData(wg *sync.WaitGroup, callback func(Item)) {
+func (i *Item) FetchData(callback func(Item)) {
 	fmt.Println("Fetching data for item: ", i.Name)
 	i.getQuantityData()
 	i.getPricingData()
@@ -45,14 +43,10 @@ func (i *Item) FetchData(wg *sync.WaitGroup, callback func(Item)) {
 
 	if(i.fetchDataFromSQL()) {
 		callback(Item{i.Name, i.Price, i.Quantity, i.id})
-		fmt.Println("Called wg")
-		wg.Done()
 	} else {
 		i.Save()
 		fmt.Println("All saved up")
 		callback(Item{i.Name, i.Price, i.Quantity, i.id})
-		fmt.Println("Called WG")
-		wg.Done()
 	}
 }
 

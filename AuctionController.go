@@ -229,7 +229,7 @@ func (c *AuctionController) parseLine(line string, characterName string, wg *syn
 				item := Item {
 					Name: itemName,
 				}
-				go item.FetchData(&wait, func(raw Item) {
+				go item.FetchData(func(raw Item) {
 					auction.Items = append(auction.Items, raw)
 					auction.Seller = seller
 
