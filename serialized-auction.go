@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"regexp"
 )
 
 type SerializedAuction struct {
@@ -34,6 +35,7 @@ func (s *SerializedAuction) toJSONString() []byte {
 
 	for _, item := range s.AuctionLine.Items {
 		uri := TitleCase(item.Name, true)
+		s.AuctionLine.raw = regexp.MustCompile(`(?i)(` + item.Name + `)`).ReplaceAllString(s.AuctionLine.raw, item.Name)
 		s.AuctionLine.raw = strings.Replace(s.AuctionLine.raw, item.Name, "<a class='item' href='/" + uri + "'>" + item.Name + "</a>", 1)
 	}
 	outputString += `{ "line" : "` + s.AuctionLine.raw + `" }`
