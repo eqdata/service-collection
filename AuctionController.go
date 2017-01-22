@@ -473,7 +473,7 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 // is the subscriber which streams the data to the consumer via socket.io
 func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
-	fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions")
+	fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
 	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server) " +
 		" VALUES "
 
@@ -494,8 +494,8 @@ func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	wg.Wait()
 
 	auctionQuery = auctionQuery[0:len(auctionQuery)-1]
-	LogInDebugMode("Params are: ", auctionParams)
-	LogInDebugMode("Query is: ", auctionQuery)
+	fmt.Println("Params are: ", auctionParams)
+	fmt.Println("Query is: ", auctionQuery)
 	if DB.conn != nil && len(auctionParams) > 0 {
 		DB.Insert(auctionQuery, auctionParams...)
 	}

@@ -36,7 +36,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 
 		// Get the items
 		itemsQuery := "SELECT id, name FROM items " +
-			"WHERE name IN ("
+			"WHERE displayName IN ("
 
 		var params []string
 		var prices []float32
