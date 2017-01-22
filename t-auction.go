@@ -35,7 +35,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 		LogInDebugMode("Player: " + strings.Title(a.Seller) + " has an id of: " + fmt.Sprint(playerId))
 
 		// Get the items
-		itemsQuery := "SELECT id, name FROM items " +
+		itemsQuery := "SELECT id, displayName FROM items " +
 			"WHERE displayName IN ("
 
 		var params []string
@@ -75,7 +75,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 						//fmt.Println("Checking if: " + item.Name + " is equal to: " + name)
 						if strings.TrimSpace(item.Name) == name {
 							a.Items[i].id = itemId
-							LogInDebugMode("Item: " + item.Name + " is equal to: " + name + " setting id to: " + fmt.Sprint(itemId))
+							fmt.Println("Item: " + item.Name + " is equal to: " + name + " setting id to: " + fmt.Sprint(itemId))
 						}
 					}
 				}
