@@ -30,6 +30,7 @@ type Item struct {
 	Price float32
 	Quantity int32
 	id int64
+	selling bool
 }
 
 // Public method to fetch data for this item, in Go public method are
@@ -42,11 +43,11 @@ func (i *Item) FetchData(callback func(Item)) {
 
 
 	if(i.fetchDataFromSQL()) {
-		callback(Item{i.Name, i.Price, i.Quantity, i.id})
+		callback(Item{i.Name, i.Price, i.Quantity, i.id, i.selling})
 	} else {
 		i.Save()
 		LogInDebugMode("All saved up")
-		callback(Item{i.Name, i.Price, i.Quantity, i.id})
+		callback(Item{i.Name, i.Price, i.Quantity, i.id, i.selling})
 	}
 }
 
@@ -165,14 +166,14 @@ func (i *Item) fetchDataFromSQL() bool {
 func (i *Item) Save() {
 	if i.Name != "" {
 		query := "INSERT IGNORE INTO items" +
-			"(name, displayName)" +
+			"(displayName, name)" +
 			"VALUES (?, ?)"
 
 		id, err := DB.Insert(query, TitleCase(i.Name, false), TitleCase(i.Name, true))
 		if err != nil {
 			fmt.Println(err.Error())
 		} else if id == 0 {
-			LogInDebugMode("Item already exists")
+			fmt.Println("Item already exists")
 		} else if id > 0 {
 			fmt.Println("Successfully created item: " + i.Name + " with id: ", id)
 		}

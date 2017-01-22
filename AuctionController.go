@@ -6,18 +6,33 @@ import (
 	"encoding/json"
 	"strings"
 	"regexp"
-	"github.com/alexmk92/stringutil"
-	"strconv"
 	"hash/fnv"
 	"github.com/bradfitz/gomemcache/memcache"
 	"sync"
 	"bytes"
 	"io/ioutil"
 	"time"
+	"github.com/alexmk92/stringutil"
+	"github.com/dghubble/trie"
+	"strconv"
 )
+
+type WalkResult struct {
+	match bool
+	searchTerm string
+	value string
+}
+
+func (w *WalkResult) reset() {
+	w.match = false
+	w.searchTerm = ""
+	w.value = ""
+}
 
 type AuctionController struct {
 	Controller
+	ItemTrie *trie.PathTrie
+	WalkResult WalkResult
 }
 
 // Receive a list of auction lines from the Log client
@@ -137,6 +152,24 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	var auctions []Auction
 	var outerWait sync.WaitGroup
 
+	c.WalkResult = WalkResult{match:false,searchTerm:"",value:""}
+
+	c.ItemTrie = trie.NewPathTrie()
+	// Load all items into Trie structure
+	itemQuery := "SELECT displayName, id FROM items ORDER BY displayName ASC"
+	rows := DB.Query(itemQuery)
+	var itemsDictionary []string
+	if rows != nil {
+		var displayName string;
+		var id int64;
+
+		for rows.Next() {
+			rows.Scan(&displayName, &id)
+			c.ItemTrie.Put(strings.ToLower(displayName), map[string]int64{displayName:id})
+			itemsDictionary = append(itemsDictionary, strings.ToLower(displayName))
+		}
+	}
+
 	for _, line := range rawAuctions.Lines {
 		outerWait.Add(1)
 		go c.parseLine(line, characterName, serverType, &outerWait, &auctions)
@@ -148,6 +181,161 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	if len(auctions) > 0 {
 		go c.saveAuctionData(auctions)
 	}
+}
+
+
+
+//func (c *AuctionController) parseLine(line, characterName, serverType string, wg *sync.WaitGroup, auctions *[]Auction) {
+//	if !c.isAuctionLine(&line) {
+//		wg.Done()
+//	} else {
+//		LogInDebugMode("Parsing line: ", line)
+//
+//		// Remove date stamp as this is localized to the users computer, we can't reliably
+//		// use this as the auction date time stamp because we can't reliably dictate if
+//		// the log-client is GMT, PST, EST etc. (date is first 27 characters)
+//		// [DDD MMM DDD 00:00:00 YYYY]
+//		//timestamp := line[0:26]  // in case we need for historical timestamps for auctions
+//		line = strings.TrimSpace(line[26:])
+//		line = strings.Replace(line, "You auction", (characterName + " auctions"), -1)
+//
+//		// Explode this array so we are left with the seller on the left and items on the right
+//		auctionParts := strings.Split(line, "auctions,")
+//		seller := auctionParts[0]
+//
+//		// Sale data is always encapsulated in single quotes, taking a substring removes these
+//		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
+//
+//		line = auctionParts[0] + auctionParts[1]
+//
+//		//items := strings.TrimSpace(auctionParts[1])
+//
+//		if !c.shouldParse(&line, serverType) {
+//			// If we can't parse then just append it to the relay server (could be the same  message)
+//			// dont do this yet, there is probably a better way of handling this!
+//			fmt.Println("Can't parse this line")
+//			/*
+//			for _, itemName := range itemList {
+//				var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
+//				auction.Items = append(auction.Items, item)
+//			}
+//			auctions = append(auctions, auction)
+//			go c.publish(auctions, false)
+//			*/
+//			wg.Done()
+//		} else {
+//			//- Go one character at a time.
+//			//- Start in WTS mode (since some people just say /auc Ale)
+//			//- If we see WTB or "Buying" then switch to buying mode
+//			//- If we see WTS or "Selling" then switch to selling mode
+//			//- After consuming each character, check the items trie to see if anything
+//			//matches
+//			//- If the current characters aren't a prefix for anything, then throw away
+//			//the current characters and start processing again.
+//			//- If the current characters are a full match for an item, then register that
+//			//item.
+//			//- After finding an item, try to process the next characters as a price.
+//			//TODO: it's hard to reason about the matching strategy.  Make it simpler.
+//			//TODO: this doesn't support quantities like 'WTS Diamond x8 100pp each' or
+//			//'WTS Diamond (8) 8k'.  A quantity without an 'x' will be interpreted
+//			//as a price.
+//			//TODO: this does greedy matches, which means that it'll think things like
+//			//Yaulp IV are just plain old Yaulp.
+//
+//			fmt.Println("Parsing line: ", line)
+//
+//			var auction Auction
+//			var sellMode bool = true
+//			var buffer []byte
+//			//var prev string
+//
+//			auction.raw = line
+//			auction.Server = serverType
+//			auction.Seller = seller
+//
+//			// Now we have set the raw auction, lets trim the seller off this
+//			line = strings.TrimSpace(line[len(auction.Seller)-1:])
+//
+//			// Don't deal with capitalization, lowercase it here
+//			line = strings.ToLower(line)
+//
+//			var prevMatch string
+//			for _, char := range line {
+//				//prev = string(buffer)
+//				buffer = append(buffer, byte(char))
+//
+//				if len(strings.TrimSpace(string(buffer))) == 0 || stringutil.CaseInsenstiveContains(string(buffer), "pst") {
+//					fmt.Println("Dead buffer, flushing!")
+//					c.flushBuffer(&buffer)
+//				} else if stringutil.CaseInsenstiveContains(string(buffer), "wts", "selling") {
+//					sellMode = true
+//					c.flushBuffer(&buffer)
+//					fmt.Println("Swapped to selling mode")
+//				} else if stringutil.CaseInsenstiveContains(string(buffer), "wtb", "buying", "wtt", "trading", "swapping") {
+//					sellMode = false
+//					c.flushBuffer(&buffer)
+//					fmt.Println("Swapped to buying mode")
+//				} else {
+//					c.WalkResult.searchTerm = string(buffer)
+//
+//					// Depth-first traverse the Trie and see if we get a match
+//					walker := func(key string, value interface{}) error {
+//						// value for each walked key is correct
+//						if len(strings.TrimSpace(c.WalkResult.searchTerm)) <= 0 {
+//							return nil
+//						} else if strings.HasPrefix(strings.ToLower(key), strings.ToLower(c.WalkResult.searchTerm)) {
+//							prevMatch = c.WalkResult.searchTerm
+//							//fmt.Println("Prev match: ", prevMatch)
+//							c.WalkResult.value = key
+//							c.WalkResult.match = true
+//						}
+//						return nil
+//					}
+//					c.ItemTrie.Walk(walker)
+//
+//					if c.WalkResult.match == false {
+//						// Check if its pricing or quantity information
+//						if len(prevMatch) > 0 {
+//							item := c.ItemTrie.Get(strings.TrimSpace(prevMatch))
+//							if item != nil {
+//								fmt.Println("Fetched item from trie: ", item)
+//								prevMatch = ""
+//								c.flushBuffer(&buffer)
+//							}
+//						}
+//						//prevMatch = ""
+//					} else {
+//						//fmt.Println("Matched: ", c.WalkResult.value)
+//					}
+//
+//					// Reset for the next item
+//					c.WalkResult.reset()
+//
+//					/*
+//					// check if the contents of the buffer is in our trie
+//					item := c.ItemTrie.Get(strings.ToLower(string(buffer)))
+//					//fmt.Println("Checking if item: " + strings.ToLower(string(buffer)) + " Exists.")
+//					if item != nil {
+//						fmt.Println("Got item: ", item)
+//					}
+//					//fmt.Println(buffer)
+//					//fmt.Println(string(buffer))
+//					*/
+//				}
+//			}
+//
+//			fmt.Println("Sell mode is: ", sellMode)
+//
+//			wg.Done()
+//		}
+//	}
+//}
+
+// Helper method to flush a buffer, maybe we'll do some other stuff
+// in here at some point
+func (c *AuctionController) flushBuffer(buffer *[]byte) {
+	fmt.Println("Flushing buffer string: ", string(*buffer))
+	*buffer = []byte{}
 }
 
 func (c *AuctionController) parseLine(line string, characterName, serverType string, wg *sync.WaitGroup, auctions *[]Auction) {
@@ -264,6 +452,7 @@ func (c *AuctionController) parseLine(line string, characterName, serverType str
 	}
 }
 
+
 //
 func (c *AuctionController) sendItemsToWikiService(items []string) {
 	if len(items) > 0 {
@@ -331,5 +520,9 @@ func (c *AuctionController) publishToRelayService(auction Auction) {
 		Timeout: time.Second * 10,
 	}
 	resp, err := client.Do(req)
-	defer resp.Body.Close()
+	if err != nil {
+
+	} else {
+		defer resp.Body.Close()
+	}
 }
