@@ -5,6 +5,7 @@ import (
 	"strings"
 	"github.com/bradfitz/gomemcache/memcache"
 	"strconv"
+	"time"
 )
 
 /*
@@ -22,8 +23,10 @@ import (
 
 type Auction struct {
 	Seller string
+	Timestamp time.Time
 	Items []Item
 	Server string
+	itemLine string
 	raw string
 }
 
@@ -48,7 +51,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 			if item.Quantity == 0 {
 				item.Quantity = 1
 			}
-			quants = append(quants, item.Quantity)
+			quants = append(quants, int32(item.Quantity))
 		}
 		itemsQuery = itemsQuery[0:len(itemsQuery)-1] + ")" // remove the last ','
 
@@ -72,8 +75,8 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 					fmt.Println("Scan error: ", err)
 				} else {
 					for i, item := range a.Items {
-						//fmt.Println("Checking if: " + item.Name + " is equal to: " + name)
-						if strings.TrimSpace(item.Name) == name {
+						fmt.Println("Checking if: " + item.Name + " is equal to: " + name)
+						if strings.ToLower(strings.TrimSpace(item.Name)) == strings.ToLower(name) {
 							a.Items[i].id = itemId
 							fmt.Println("Item: " + item.Name + " is equal to: " + name + " setting id to: " + fmt.Sprint(itemId))
 						}
@@ -92,12 +95,13 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 		for i, item := range a.Items {
 			LogInDebugMode("Checking item: ", item.Name + " for seller: " + a.Seller)
 			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) && item.id > 0 {
-				auctionQuery += "(?, ?, ?, ?, ?),"
+				auctionQuery += "(?, ?, ?, ?, ?, ?),"
 				auctionParams = append(auctionParams, playerId)
 				auctionParams = append(auctionParams, item.id)
 				auctionParams = append(auctionParams, prices[i])
 				auctionParams = append(auctionParams, quants[i])
 				auctionParams = append(auctionParams, a.Server)
+				auctionParams = append(auctionParams, a.Timestamp)
 			} else if item.id <= 0 {
 				LogInDebugMode("Item: ", item.Name + " does not have an id :(")
 			} else {

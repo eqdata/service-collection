@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"strings"
-	"github.com/alexmk92/stringutil"
 	"regexp"
 	"strconv"
 )
@@ -28,154 +27,70 @@ import (
 type Item struct {
 	Name string
 	Price float32
-	Quantity int32
-	id int64
+	Quantity int16
 	selling bool
+	id int64
 }
 
-// Public method to fetch data for this item, in Go public method are
-// capitalised by convention (doesn't actually enforce Public/Private methods in go)
-// this method will call fetchDataFromWiki and fetchDataFromCache where appropriate
-func (i *Item) FetchData(callback func(Item)) {
-	LogInDebugMode("Fetching data for item: ", i.Name)
-	i.getQuantityData()
-	i.getPricingData()
+// This method should be fairly self explanatory.  We simply use a regex to
+// extract matches from the input string and then write the data back out
+// to the last item on the input struct (this assumes that meta info is in
+// the order of ITEM QUANTITY PRICE or ITEM PRICE QUANTITY etc.
+// if the order is QUANTITY ITEM PRICE then the quantity will be assigned to
+// the prior item (assuming auction.items > 1) and the price would be assigned
+// to the correct item, if however auction.items == 0 then the extracted meta
+// inf is lost, this could possibly be parsed correctly by storing a buffer
+// of prices for previously parsed items when the legnth is 0, as we could then
+// assume that the rest of the items would follow the same pattern in that string...(TODO?)
+func (i *Item) ParsePriceAndQuantity(buffer *[]byte, auction *Auction) bool {
+	//fmt.Println("Parsing: " + string(*buffer) + " for price data")
+	price_regex := regexp.MustCompile(`(?im)^(x ?)?(\d*\.?\d*)(k|p|pp| ?x)?$`)
+	price_string := strings.TrimSpace(string(*buffer))
 
-
-	if(i.fetchDataFromSQL()) {
-		callback(Item{i.Name, i.Price, i.Quantity, i.id, i.selling})
-	} else {
-		i.Save()
-		LogInDebugMode("All saved up")
-		callback(Item{i.Name, i.Price, i.Quantity, i.id, i.selling})
-	}
-}
-
-// Extracts quantity data from the item name
-func (i *Item) getQuantityData() {
-	hasQuantityData, _ := regexp.MatchString("(x ?[0-9]+|[0-9]+ ?x)", i.Name)
-	if hasQuantityData {
-		isItemStack := false
-		if stringutil.CaseInsenstiveContains(i.Name, " stack", " stack ", "stack ") {
-			isItemStack = true
-			i.Name = strings.TrimSpace(regexp.MustCompile("(?i)(stack[s]?)").ReplaceAllString(i.Name, ""))
-			LogInDebugMode("Name is now: ", i.Name)
-		}
-
-		//isPricePerUnit := false
-		if stringutil.CaseInsenstiveContains(i.Name, " each", " each ", " per ", " per") {
-			//isPricePerUnit = true
-			i.Name = strings.TrimSpace(regexp.MustCompile("(?i)(( per[\\s\\n])|( each[\\s\\n])|( ea[\\s\\n]))").ReplaceAllString(i.Name, ""))
-			LogInDebugMode("Name is now: ", i.Name)
-		}
-
-		quantityData := regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").FindAllString(i.Name, 1)
-		if len(quantityData) > 0 {
-			// Replace the quantity data in item name
-			i.Name = strings.TrimSpace(regexp.MustCompile("(x ?[0-9]+|[0-9]+ ?x)").ReplaceAllString(i.Name, ""))
-
-			// Remove all non numeric characters so we can get the qty
-			LogInDebugMode("Quantity is: ", quantityData[0])
-			quantityData[0] = regexp.MustCompile("[^0-9.]").ReplaceAllString(quantityData[0], "")
-
-			quantity, err := strconv.ParseFloat(quantityData[0], 32)
-			if err == nil {
-				if isItemStack {
-					i.Quantity = int32(quantity * 20)
-				} else {
-					i.Quantity = int32(quantity)
-				}
-			} else {
-				panic(err)
-			}
-
-			LogInDebugMode("Item is now: ", i)
-		}
-	} else {
-		i.Quantity = 1
-	}
-}
-
-// Checks if the item has a price associated with its name set
-// in the parser stage, if so amend the name to strip the price from
-// it and set the price of the item on the struct
-func (i *Item) getPricingData() {
-	// Check if the price is price per unit or combined price
-	hasPricingData, _ := regexp.MatchString("([a-zA-Z ]+)([0-9]+(.[0-9]+)?[pkm]?)", i.Name)
-	if hasPricingData {
-		priceData := regexp.MustCompile("([0-9]+([.0-9]+)?[pkm]?)").FindAllString(i.Name, -1)
-		if len(priceData) > 0 {
-			var itemIndex = len(priceData)-1
-			priceIndex := stringutil.CaseInsensitiveIndexOf(i.Name, priceData[itemIndex])
-			if(priceIndex > -1) {
-				var modifier float32 = 1.0
-				// trim and get the last character so we can check the modifier
-				compare := strings.ToLower(strings.TrimSpace(priceData[itemIndex])[len(priceData[itemIndex])-1:len(priceData[itemIndex])])
-				if compare == "k" {
-					modifier = 1000.0
-				} else if compare == "m" {
-					modifier = 1000000.0
-				}
-				priceData[itemIndex] = regexp.MustCompile("[^0-9.]").ReplaceAllString(priceData[itemIndex], "")
-
-				i.Name = TitleCase(strings.TrimSpace(i.Name[0:priceIndex]), false)
-				price, err := strconv.ParseFloat(priceData[itemIndex], 32)
-				if err == nil {
-					i.Price = float32(price) * modifier
-				} else {
-					panic(err)
-				}
-			}
-			LogInDebugMode("Item is now: ", i)
-		}
-	}
-}
-
-// Check our cache first to see if the item exists - this will eventually return something
-// other than a bool, it will return a parsed Item struct from a deserialised JSON object
-// sent back from the mongo store
-func (i *Item) fetchDataFromSQL() bool {
-	var (
-		name string
-	)
-
-	query := "SELECT name " +
-		"FROM items " +
-		"WHERE name = ? " +
-		"OR displayName = ?"
-
-	rows := DB.Query(query, i.Name, i.Name)
-	if rows != nil {
-		for rows.Next() {
-			err := rows.Scan(&name)
-			if err != nil {
-				fmt.Println("Scan error: ", err)
-			}
-			DB.CloseRows(rows)
-			return true
-		}
-		DB.CloseRows(rows)
-	}
-
-	LogInDebugMode("No record found in our SQL database for item: ", i.Name)
-	return false
-}
-
-// Very basic save functionality to save item to DB, main save will be done
-// inside of the Wiki parser
-func (i *Item) Save() {
-	if i.Name != "" {
-		query := "INSERT IGNORE INTO items" +
-			"(displayName, name)" +
-			"VALUES (?, ?)"
-
-		id, err := DB.Insert(query, TitleCase(i.Name, false), TitleCase(i.Name, true))
+	matches := price_regex.FindStringSubmatch(price_string)
+	if len(matches) > 1 && len(strings.TrimSpace(matches[0])) > 0 && len(auction.Items) > 0 {
+		matches = matches[1:]
+		price, err := strconv.ParseFloat(strings.TrimSpace(matches[1]), 64)
 		if err != nil {
-			fmt.Println(err.Error())
-		} else if id == 0 {
-			fmt.Println("Item already exists")
-		} else if id > 0 {
-			fmt.Println("Successfully created item: " + i.Name + " with id: ", id)
+			fmt.Println("error setting price: ", err)
+			price = 0.0
 		}
+		var prelimiter string = strings.TrimSpace(strings.ToLower(matches[0]))
+		var delimiter string = strings.ToLower(matches[2])
+		var multiplier float64 = 1.0;
+		var isQuantity bool = false
+
+		switch delimiter {
+		case "x": isQuantity = true; break;
+		case "p": multiplier = 1.0; break;
+		case "k": multiplier = 1000.0; break;
+		case "pp": multiplier = 1.0; break;
+		case "m": multiplier = 1000000.0; break;
+		default: multiplier = 1; break;
+		}
+
+		if prelimiter == "x" {
+			isQuantity = true
+		}
+
+		// check if we need to set a new multiplier
+		price_without_delim_regex := regexp.MustCompile(`(?im)^([0-9]{1,}\.[0-9]{1,})$`)
+		matches = price_without_delim_regex.FindAllString(price_string, -1)
+		if len(matches) > 0 {
+			multiplier = 1000.0
+		}
+
+		// check if this was in-fact quantity data
+		var item *Item = &auction.Items[len(auction.Items)-1]
+		if isQuantity == true && price > 0.0 {
+			//fmt.Println("setting quantity: ", fmt.Sprint(int16(price)))
+			item.Quantity = int16(price)
+		} else if price > 0.0 && float32(price * multiplier) > item.Price {
+			item.Price = float32((price * multiplier) / float64(item.Quantity))
+		}
+
+		return true
 	}
+
+	return false
 }

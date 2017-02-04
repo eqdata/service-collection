@@ -12,9 +12,9 @@ import (
 	"bytes"
 	"io/ioutil"
 	"time"
+	"github.com/fvbock/trie"
+	"errors"
 	"github.com/alexmk92/stringutil"
-	"github.com/dghubble/trie"
-	"strconv"
 )
 
 type WalkResult struct {
@@ -31,7 +31,7 @@ func (w *WalkResult) reset() {
 
 type AuctionController struct {
 	Controller
-	ItemTrie *trie.PathTrie
+	ItemTrie *trie.Trie
 	WalkResult WalkResult
 }
 
@@ -152,21 +152,24 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	var auctions []Auction
 	var outerWait sync.WaitGroup
 
-	c.WalkResult = WalkResult{match:false,searchTerm:"",value:""}
+	c.ItemTrie = trie.NewTrie()
+	c.ItemTrie.Add("selling")
+	c.ItemTrie.Add("buying")
+	c.ItemTrie.Add("wtb")
+	c.ItemTrie.Add("wts")
 
-	c.ItemTrie = trie.NewPathTrie()
 	// Load all items into Trie structure
 	itemQuery := "SELECT displayName, id FROM items ORDER BY displayName ASC"
 	rows := DB.Query(itemQuery)
-	var itemsDictionary []string
 	if rows != nil {
-		var displayName string;
-		var id int64;
-
 		for rows.Next() {
-			rows.Scan(&displayName, &id)
-			c.ItemTrie.Put(strings.ToLower(displayName), map[string]int64{displayName:id})
-			itemsDictionary = append(itemsDictionary, strings.ToLower(displayName))
+			var itemName string
+			var itemId int64
+
+			rows.Scan(&itemName, &itemId)
+			if itemId > 0 && itemName != "" {
+				c.ItemTrie.Add(strings.ToLower(itemName))
+			}
 		}
 	}
 
@@ -183,219 +186,79 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	}
 }
 
+func (c *AuctionController) extractParserInformationFromLine(line string, auction *Auction) error {
+	fmt.Println("Attempting to match: ", line)
+	reg := regexp.MustCompile(`(?m)^\[(?P<Timestamp>[A-Za-z0-9: ]+)+] (?P<Seller>[A-Za-z]+) auction[s]?, '(?P<Items>.+)'$`)
+	matches := reg.FindStringSubmatch(line)
+	if len(matches) == 0 {
+		return errors.New("No matches found for expression")
+	}
 
+	date := strings.TrimSpace(matches[1])
+	layout := "Mon Jan 2 15:04:05 2006"
+	t, err := time.Parse(layout, date)
+	t.Format("02-01-2006 15:04:05")
+	if err != nil {
+		return errors.New("Invalid date stamp for this line, cannot parse! ∂" + err.Error())
+	}
 
-//func (c *AuctionController) parseLine(line, characterName, serverType string, wg *sync.WaitGroup, auctions *[]Auction) {
-//	if !c.isAuctionLine(&line) {
-//		wg.Done()
-//	} else {
-//		LogInDebugMode("Parsing line: ", line)
-//
-//		// Remove date stamp as this is localized to the users computer, we can't reliably
-//		// use this as the auction date time stamp because we can't reliably dictate if
-//		// the log-client is GMT, PST, EST etc. (date is first 27 characters)
-//		// [DDD MMM DDD 00:00:00 YYYY]
-//		//timestamp := line[0:26]  // in case we need for historical timestamps for auctions
-//		line = strings.TrimSpace(line[26:])
-//		line = strings.Replace(line, "You auction", (characterName + " auctions"), -1)
-//
-//		// Explode this array so we are left with the seller on the left and items on the right
-//		auctionParts := strings.Split(line, "auctions,")
-//		seller := auctionParts[0]
-//
-//		// Sale data is always encapsulated in single quotes, taking a substring removes these
-//		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
-//
-//		line = auctionParts[0] + auctionParts[1]
-//
-//		//items := strings.TrimSpace(auctionParts[1])
-//
-//		if !c.shouldParse(&line, serverType) {
-//			// If we can't parse then just append it to the relay server (could be the same  message)
-//			// dont do this yet, there is probably a better way of handling this!
-//			fmt.Println("Can't parse this line")
-//			/*
-//			for _, itemName := range itemList {
-//				var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
-//				auction.Items = append(auction.Items, item)
-//			}
-//			auctions = append(auctions, auction)
-//			go c.publish(auctions, false)
-//			*/
-//			wg.Done()
-//		} else {
-//			//- Go one character at a time.
-//			//- Start in WTS mode (since some people just say /auc Ale)
-//			//- If we see WTB or "Buying" then switch to buying mode
-//			//- If we see WTS or "Selling" then switch to selling mode
-//			//- After consuming each character, check the items trie to see if anything
-//			//matches
-//			//- If the current characters aren't a prefix for anything, then throw away
-//			//the current characters and start processing again.
-//			//- If the current characters are a full match for an item, then register that
-//			//item.
-//			//- After finding an item, try to process the next characters as a price.
-//			//TODO: it's hard to reason about the matching strategy.  Make it simpler.
-//			//TODO: this doesn't support quantities like 'WTS Diamond x8 100pp each' or
-//			//'WTS Diamond (8) 8k'.  A quantity without an 'x' will be interpreted
-//			//as a price.
-//			//TODO: this does greedy matches, which means that it'll think things like
-//			//Yaulp IV are just plain old Yaulp.
-//
-//			fmt.Println("Parsing line: ", line)
-//
-//			var auction Auction
-//			var sellMode bool = true
-//			var buffer []byte
-//			//var prev string
-//
-//			auction.raw = line
-//			auction.Server = serverType
-//			auction.Seller = seller
-//
-//			// Now we have set the raw auction, lets trim the seller off this
-//			line = strings.TrimSpace(line[len(auction.Seller)-1:])
-//
-//			// Don't deal with capitalization, lowercase it here
-//			line = strings.ToLower(line)
-//
-//			var prevMatch string
-//			for _, char := range line {
-//				//prev = string(buffer)
-//				buffer = append(buffer, byte(char))
-//
-//				if len(strings.TrimSpace(string(buffer))) == 0 || stringutil.CaseInsenstiveContains(string(buffer), "pst") {
-//					fmt.Println("Dead buffer, flushing!")
-//					c.flushBuffer(&buffer)
-//				} else if stringutil.CaseInsenstiveContains(string(buffer), "wts", "selling") {
-//					sellMode = true
-//					c.flushBuffer(&buffer)
-//					fmt.Println("Swapped to selling mode")
-//				} else if stringutil.CaseInsenstiveContains(string(buffer), "wtb", "buying", "wtt", "trading", "swapping") {
-//					sellMode = false
-//					c.flushBuffer(&buffer)
-//					fmt.Println("Swapped to buying mode")
-//				} else {
-//					c.WalkResult.searchTerm = string(buffer)
-//
-//					// Depth-first traverse the Trie and see if we get a match
-//					walker := func(key string, value interface{}) error {
-//						// value for each walked key is correct
-//						if len(strings.TrimSpace(c.WalkResult.searchTerm)) <= 0 {
-//							return nil
-//						} else if strings.HasPrefix(strings.ToLower(key), strings.ToLower(c.WalkResult.searchTerm)) {
-//							prevMatch = c.WalkResult.searchTerm
-//							//fmt.Println("Prev match: ", prevMatch)
-//							c.WalkResult.value = key
-//							c.WalkResult.match = true
-//						}
-//						return nil
-//					}
-//					c.ItemTrie.Walk(walker)
-//
-//					if c.WalkResult.match == false {
-//						// Check if its pricing or quantity information
-//						if len(prevMatch) > 0 {
-//							item := c.ItemTrie.Get(strings.TrimSpace(prevMatch))
-//							if item != nil {
-//								fmt.Println("Fetched item from trie: ", item)
-//								prevMatch = ""
-//								c.flushBuffer(&buffer)
-//							}
-//						}
-//						//prevMatch = ""
-//					} else {
-//						//fmt.Println("Matched: ", c.WalkResult.value)
-//					}
-//
-//					// Reset for the next item
-//					c.WalkResult.reset()
-//
-//					/*
-//					// check if the contents of the buffer is in our trie
-//					item := c.ItemTrie.Get(strings.ToLower(string(buffer)))
-//					//fmt.Println("Checking if item: " + strings.ToLower(string(buffer)) + " Exists.")
-//					if item != nil {
-//						fmt.Println("Got item: ", item)
-//					}
-//					//fmt.Println(buffer)
-//					//fmt.Println(string(buffer))
-//					*/
-//				}
-//			}
-//
-//			fmt.Println("Sell mode is: ", sellMode)
-//
-//			wg.Done()
-//		}
-//	}
-//}
+	auction.raw = line
+	auction.Timestamp = t
+	auction.Seller = matches[2]
+	auction.itemLine = matches[3]
 
-// Helper method to flush a buffer, maybe we'll do some other stuff
-// in here at some point
-func (c *AuctionController) flushBuffer(buffer *[]byte) {
-	fmt.Println("Flushing buffer string: ", string(*buffer))
-	*buffer = []byte{}
+	return nil
 }
 
-func (c *AuctionController) parseLine(line string, characterName, serverType string, wg *sync.WaitGroup, auctions *[]Auction) {
+// Pretty simple method, we query the trie in O(W * L) time to check
+// if it the item can be appended, if not we check if it has a spell
+// prefix and if it does we insert it to the trie, we insert with
+// a base value of quant 1.0 then our pricing parser will fill in the
+// rest
+func (c *AuctionController) appendIfInTrie(item *Item, out *[]Item) {
+	if c.ItemTrie.Has(strings.TrimSpace(item.Name)) {
+		item.Quantity = 1.0
+		*out = append(*out, *item)
+	} else if c.ItemTrie.Has("spell: " + strings.TrimSpace(item.Name)) {
+		item.Name = "spell: " + item.Name
+		item.Quantity = 1.0
+		*out = append(*out, *item)
+	}
+}
+
+func (c *AuctionController) parseLine(line, characterName, serverType string, wg *sync.WaitGroup, auctions *[]Auction) {
+	fmt.Println(c.ItemTrie.Has("wurmslayer"))
 	if !c.isAuctionLine(&line) {
 		wg.Done()
 	} else {
-		var auction Auction
+		auction := Auction{}
+		item := Item{}
 
 		auction.Server = serverType
 
-		LogInDebugMode("Parsing line: ", line)
-
-		// Split the auction string so we have date on the left and auctions on the right
-		parts := strings.Split(line, "]")
-
-		// Remove date stamp as this is localized to the users computer, we can't reliably
-		// use this as the auction date time stamp because we can't reliably dictate if
-		// the log-client is GMT, PST, EST etc.
-		line = parts[1]
-
-		parts[1] = strings.TrimSpace(parts[1])
-		parts[1] = strings.Replace(parts[1], "You auction", (characterName + " auctions"), -1)
-
-		auction.raw = parts[1]
-
-		// Explode this array so we are left with the seller on the left and items on the right
-		auctionParts := strings.Split(parts[1], "auctions,")
-
-		seller := auctionParts[0]
-
-		// Sale data is always encapsulated in single quotes, taking a substring removes these
-		auctionParts[1] = strings.TrimSpace(auctionParts[1])[1:len(auctionParts[1])-2]
-
-		line = auctionParts[0] + auctionParts[1]
-
-		items := strings.TrimSpace(auctionParts[1])
-		items = regexp.MustCompile(`(?i)wts`).ReplaceAllLiteralString(items, "")
-
-		// Discard the WTB portion of the string
-		wtbIndex := stringutil.CaseInsensitiveIndexOf(items, "WTB")
-		if(wtbIndex > -1) {
-			items = items[0:wtbIndex]
+		err := c.extractParserInformationFromLine(line, &auction)
+		if err != nil {
+			fmt.Println(err.Error())
+			wg.Done()
+			return
+		} else {
+			fmt.Println("Handling auction for seller: " + auction.Seller)
 		}
 
-		LogInDebugMode("Line is now: ", line)
+		// check if we need to set the sellers name to the streaming clients name
+		// this happens when the log detects a you auction: line.  We want
+		// to supply the correct name for the auction DB otherwise sale data
+		// is skewed tremendously!
+		if strings.ToLower(auction.Seller) == "you" {
+			auction.Seller = characterName
+		}
 
-		// trim any leading/trailing space so that we only explode string list on proper constraints
-		items = strings.TrimSpace(items)
+		LogInDebugMode("Parsing line: ", line)
 
-		LogInDebugMode("Items pre split: ", items);
-		re := regexp.MustCompile(`(?i)wts|wtb|pst`)
-		items = re.ReplaceAllString(items, "")
-		re = regexp.MustCompile("((Spell: )?(([A-Z]{1,2}|(of|or|the|VP)?)[a-z]+[\\`']{0,1}[a-z]([-][a-z]+)?( {0,1})([I]{1,3})?)+([0-9]+(.[0-9]+)?[pkm]?)?|,-\\/&:)([\\d\\D]{1,3}(stacks|stack)){0,1}")
-		itemList := re.FindAllString(items, -1)
-		LogInDebugMode("Items after split: ", itemList)
-
-		if !c.shouldParse(&line, serverType) {
+		if !c.shouldParse(&auction.raw, auction.Server) {
 			// If we can't parse then just append it to the relay server (could be the same  message)
 			// dont do this yet, there is probably a better way of handling this!
-			LogInDebugMode("Can't parse this line")
+			fmt.Println("Can't parse this line")
 			/*
 			for _, itemName := range itemList {
 				var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
@@ -406,41 +269,153 @@ func (c *AuctionController) parseLine(line string, characterName, serverType str
 			*/
 			wg.Done()
 		} else {
-			LogInDebugMode("Seller is: ", seller)
+			//- Go one character at a time.
+			//- Start in WTS mode (since some people just say /auc Ale)
+			//- If we see WTB or "Buying" then switch to buying mode
+			//- If we see WTS or "Selling" then switch to selling mode
+			//- After consuming each character, check the items trie-test to see if anything
+			//matches
+			//- If the current characters aren't a prefix for anything, then throw away
+			//the current characters and start processing again.
+			//- If the current characters are a full match for an item, then register that
+			//item.
+			//- After finding an item, try to process the next characters as a price.
+			//TODO: it's hard to reason about the matching strategy.  Make it simpler.
+			//TODO: this doesn't support quantities like 'WTS Diamond x8 100pp each' or
+			//'WTS Diamond (8) 8k'.  A quantity without an 'x' will be interpreted
+			//as a price.
+			//TODO: this does greedy matches, which means that it'll think things like
+			//Yaulp IV are just plain old Yaulp.
 
-			var wait sync.WaitGroup
-			var itemsForWikiService []string
-			for _, itemName := range itemList {
-				wait.Add(1)
-				// Make sure noone is trying to trade here
-				orIndex := stringutil.CaseInsensitiveIndexOf(itemName, " or")
-				if  orIndex > -1 {
-					itemName = itemName[0:orIndex]
-				}
-				itemName = strings.TrimSpace(itemName)
-				LogInDebugMode("Item is: " + itemName + ", length is: " + strconv.Itoa(len(itemName)))
-				item := Item {
-					Name: itemName,
-				}
-				// Think about using go channels to do this instead of a callback and wait groups, this way
-				// of doing things just looks plain ugly and doesn't embrace go's parallelism paradigm, instead
-				// we're just emulating asynchronousy as we do in JS.  Works kinda but could be much better
-				go item.FetchData(func(raw Item) {
-					auction.Items = append(auction.Items, raw)
-					auction.Seller = seller
+			fmt.Println("Parsing line: ", line)
 
-					LogInDebugMode("Parsed item is: ", raw)
-					exists := stringutil.CaseInsensitiveSliceContainsString(itemsForWikiService, raw.Name)
-					if !exists {
-						itemsForWikiService = append(itemsForWikiService, raw.Name)
+			buffer := []byte{}
+			selling := true
+			skippedChar := []byte{} // use an array so we can check the size
+
+			// Don't deal with capitlization, remove it here (trie only checks lowercase)
+			line = strings.ToLower(auction.itemLine)
+
+			// NOTE: We use Go's `continue` kewyword to break execution flow instead of
+			// chaining else-if's.  I personally find this more readable with the
+			// comment blocks above each part of the parser!!
+			var prevMatch string = ""
+			for i, char := range strings.ToLower(line) {
+				buffer = append(buffer, byte(char))
+
+				// check for selling
+				if stringutil.CaseInsenstiveContains(string(buffer), "wts", "selling") {
+					selling = true
+					buffer = []byte{}
+					prevMatch = ""
+					skippedChar = []byte{}
+					continue
+				}
+
+				// check for buying
+				if stringutil.CaseInsenstiveContains(string(buffer), "wtb", "buying", "trading") {
+					selling = false
+					buffer = []byte{}
+					prevMatch = ""
+					skippedChar = []byte{}
+					continue
+				}
+
+				// check if we skipped a letter on the previous iteration and shift the items forward
+				// this checks example: wurmslayerale it would fail at wurmslayera we set "a" as the
+				// skipped character, extract wurmslayer and the begin to match ale using the "a" char
+				// once we append to the buffer we reset the skipped char to avoid prepending on
+				// subsequent calls
+				if len(skippedChar) > 0 {
+					buffer = append(skippedChar[0:1], buffer...)
+					skippedChar = []byte{}
+				}
+
+				// check if the current string exists in the buffer, we trim any spaces
+				// from the left but not the right as that can skew the results
+				// if we find a match store the previous match, for the next iteration.
+				// finally we check to see if we're at the last position in the line,
+				// if we are then we reset the buffer and attempt to append to the trie
+				// if our buffer contains a match
+				//fmt.Println("checking if trie has: ", string(buffer))
+				if c.ItemTrie.HasPrefix(strings.TrimLeft(string(buffer), " ")) || c.ItemTrie.HasPrefix("spell: " + strings.TrimLeft(string(buffer), " ")) {
+					prevMatch = string(buffer)
+					//fmt.Println("Has prefix: ", string(buffer))
+					if i == len(line)-1 {
+						buffer = []byte{}
+						item.Name = prevMatch
+						item.selling = selling
+						c.appendIfInTrie(&item, &auction.Items)
+						prevMatch = ""
+						skippedChar = []byte{}
 					}
 
-					wait.Done()
-				})
+					continue
+				}
+				// The trie did not have the prefix composed of the char buffer, we now evaluate
+				// the "previousMatch" which is the buffer string n-1.  We can assume that
+				// on this iteration the new character accessed caused the buffer to be
+				// invalidated on the item trie, therefore we append this character
+				// into the skippedChar byte and then clear the buffer.
+				// On our next iteration we populate the buffer with this "skipped"
+				// character in order to build the next item line...
+				// this allows us to catch cases where items are budged
+				// up against one another without separators such as
+				// wurmslayerswiftwindale would allow us to extract:
+				// wurmslayer swiftwind ale
+				// NOTE: We don't reset the buffer in this method as we always want
+				// to check for Pricing and Quantity data, we will only reset
+				// the buffer if no match is found for meta information about
+				// the current item!
+				if prevMatch != "" {
+					//fmt.Println("Prev was: ", prevMatch)
+
+					// We don't want to put spaces back into the buffer, the whole purpose of
+					// skippedChar is to catch cases where uses budge items together.
+					// Therefore we will only append non space characters.
+					if string(byte(char)) != " " { skippedChar = append(skippedChar, byte(char)) }
+					//fmt.Println("Buffer is: ", (string(buffer)))
+					//fmt.Println("Skipped buffer is: ", string(skippedChar))
+
+					item.Name = prevMatch
+					item.selling = selling
+					c.appendIfInTrie(&item, &auction.Items)
+				}
+				// This is the final part of the parser, the previous block will have added a
+				// new item to the auction items array if it found a match in the trie, otherwise
+				// the array will remain the same.
+				// At this point we want to extract any meta information for this item.  We can
+				// assume that the buffer now contains information like " x2 50p" which we want
+				// to extract and assign to the item.   If however none of our price extraction
+				// reg-exs find a match we set "prevMatch" back to null and we also empty our buffer
+				// as we have now essentially exhausted our search for this item
+				if !item.ParsePriceAndQuantity(&buffer, &auction) {
+					prevMatch = ""
+					buffer = []byte{}
+
+					continue
+				}
+				// Just continue execution, nothing else to be caught here - this means that we have
+				// successfully extracted meta information, woot!
+				// NOTE: We reset the skippedChar buffer here as we found some meta information
+				// on the price or quantity, therefore we dont need to append on the next
+				// iteration of hte loop
+				skippedChar = []byte{}
 			}
 
-			// Wait for all inner work to complete before we process next line
-			wait.Wait()
+			fmt.Println("Buffer is: ", string(buffer))
+			fmt.Println("Is sell mode? ", selling)
+			fmt.Println("Items is: ", &auction.Items)
+			fmt.Println("Total items: ", fmt.Sprint(len(auction.Items)))
+
+			itemsForWikiService := []string{}
+			for _, item := range auction.Items {
+				exists := stringutil.CaseInsensitiveSliceContainsString(itemsForWikiService, item.Name)
+				if !exists {
+					itemsForWikiService = append(itemsForWikiService, item.Name)
+				}
+			}
+			fmt.Println("Sending: " + fmt.Sprint(itemsForWikiService) + " to service")
 
 			// Append to the output array and send it to the web front end (batching updates looks slow)
 			*auctions = append(*auctions, auction)
@@ -452,8 +427,16 @@ func (c *AuctionController) parseLine(line string, characterName, serverType str
 	}
 }
 
+// Helper method to flush a buffer, maybe we'll do some other stuff
+// in here at some point
+func (c *AuctionController) flushBuffer(buffer *[]byte) {
+	fmt.Println("Flushing buffer string: ", string(*buffer))
+	*buffer = []byte{}
+}
 
-//
+
+
+// Publishes a list of items to the wiki service to fetch their stats
 func (c *AuctionController) sendItemsToWikiService(items []string) {
 	if len(items) > 0 {
 		fmt.Println("Sending: " + fmt.Sprint(len(items)) + " items to wiki service.")
@@ -474,7 +457,7 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
 	fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
-	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server) " +
+	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, created_at) " +
 		" VALUES "
 
 	wg := sync.WaitGroup{}
