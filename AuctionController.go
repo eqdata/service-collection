@@ -427,15 +427,6 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 	}
 }
 
-// Helper method to flush a buffer, maybe we'll do some other stuff
-// in here at some point
-func (c *AuctionController) flushBuffer(buffer *[]byte) {
-	fmt.Println("Flushing buffer string: ", string(*buffer))
-	*buffer = []byte{}
-}
-
-
-
 // Publishes a list of items to the wiki service to fetch their stats
 func (c *AuctionController) sendItemsToWikiService(items []string) {
 	if len(items) > 0 {
