@@ -52,7 +52,7 @@ func (i *Item) ParsePriceAndQuantity(buffer *[]byte, auction *Auction) bool {
 		matches = matches[1:]
 		price, err := strconv.ParseFloat(strings.TrimSpace(matches[1]), 64)
 		if err != nil {
-			fmt.Println("error setting price: ", err)
+			fmt.Println("error setting for string: " + strings.TrimSpace(matches[1]) + ", price: ", err)
 			price = 0.0
 		}
 		var prelimiter string = strings.TrimSpace(strings.ToLower(matches[0]))

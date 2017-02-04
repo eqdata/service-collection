@@ -186,6 +186,7 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	}
 }
 
+// Extract
 func (c *AuctionController) extractParserInformationFromLine(line string, auction *Auction) error {
 	fmt.Println("Attempting to match: ", line)
 	reg := regexp.MustCompile(`(?m)^\[(?P<Timestamp>[A-Za-z0-9: ]+)+] (?P<Seller>[A-Za-z]+) auction[s]?, '(?P<Items>.+)'$`)
@@ -226,6 +227,7 @@ func (c *AuctionController) appendIfInTrie(item *Item, out *[]Item) {
 	}
 }
 
+// New parse line strategy, code is fairly self explanatory
 func (c *AuctionController) parseLine(line, characterName, serverType string, wg *sync.WaitGroup, auctions *[]Auction) {
 	fmt.Println(c.ItemTrie.Has("wurmslayer"))
 	if !c.isAuctionLine(&line) {
@@ -403,10 +405,10 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 				skippedChar = []byte{}
 			}
 
-			fmt.Println("Buffer is: ", string(buffer))
-			fmt.Println("Is sell mode? ", selling)
-			fmt.Println("Items is: ", &auction.Items)
-			fmt.Println("Total items: ", fmt.Sprint(len(auction.Items)))
+			//fmt.Println("Buffer is: ", string(buffer))
+			//fmt.Println("Is sell mode? ", selling)
+			//fmt.Println("Items is: ", &auction.Items)
+			//fmt.Println("Total items: ", fmt.Sprint(len(auction.Items)))
 
 			itemsForWikiService := []string{}
 			for _, item := range auction.Items {
@@ -415,7 +417,7 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 					itemsForWikiService = append(itemsForWikiService, item.Name)
 				}
 			}
-			fmt.Println("Sending: " + fmt.Sprint(itemsForWikiService) + " to service")
+			//fmt.Println("Sending: " + fmt.Sprint(itemsForWikiService) + " to service")
 
 			// Append to the output array and send it to the web front end (batching updates looks slow)
 			*auctions = append(*auctions, auction)
@@ -430,7 +432,7 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 // Publishes a list of items to the wiki service to fetch their stats
 func (c *AuctionController) sendItemsToWikiService(items []string) {
 	if len(items) > 0 {
-		fmt.Println("Sending: " + fmt.Sprint(len(items)) + " items to wiki service.")
+		//fmt.Println("Sending: " + fmt.Sprint(len(items)) + " items to wiki service.")
 
 		encodedItems, _ := json.Marshal(items)
 		resp, err := http.Post("http://" + WIKI_SERVICE_HOST + ":" + WIKI_SERVICE_PORT + "/items", "application/json", bytes.NewBuffer(encodedItems))
@@ -447,7 +449,7 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 // is the subscriber which streams the data to the consumer via socket.io
 func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
-	fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
+	//fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
 	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, created_at) " +
 		" VALUES "
 
@@ -468,8 +470,8 @@ func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	wg.Wait()
 
 	auctionQuery = auctionQuery[0:len(auctionQuery)-1]
-	fmt.Println("Params are: ", auctionParams)
-	fmt.Println("Query is: ", auctionQuery)
+	//fmt.Println("Params are: ", auctionParams)
+	//fmt.Println("Query is: ", auctionQuery)
 	if DB.conn != nil && len(auctionParams) > 0 {
 		DB.Insert(auctionQuery, auctionParams...)
 	}

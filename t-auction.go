@@ -75,10 +75,10 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 					fmt.Println("Scan error: ", err)
 				} else {
 					for i, item := range a.Items {
-						fmt.Println("Checking if: " + item.Name + " is equal to: " + name)
+						//fmt.Println("Checking if: " + item.Name + " is equal to: " + name)
 						if strings.ToLower(strings.TrimSpace(item.Name)) == strings.ToLower(name) {
 							a.Items[i].id = itemId
-							fmt.Println("Item: " + item.Name + " is equal to: " + name + " setting id to: " + fmt.Sprint(itemId))
+							//fmt.Println("Item: " + item.Name + " is equal to: " + name + " setting id to: " + fmt.Sprint(itemId))
 						}
 					}
 				}
