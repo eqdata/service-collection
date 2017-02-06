@@ -30,16 +30,16 @@ func (s *SerializedAuction) deserialize(bytes []byte) SerializedAuction {
 }
 
 func (s *SerializedAuction) toJSONString() []byte {
-	var outputString string = `{ "Lines": [`
-
 	itemMap := ""
 	for _, item := range s.AuctionLine.Items {
 		uri := TitleCase(strings.TrimSpace(item.Name), true)
-		itemMap += `{ "name" : "` + strings.TrimSpace(item.Name) + `", "uri" : "` + uri + `" }, `
+		itemMap += `{ "name" : "` + TitleCase(strings.TrimSpace(item.Name), false) + `", "uri" : "` + uri + `" }, `
 	}
-	itemMap = itemMap[0:len(itemMap)-2]
-	outputString += `{ "line" : "` + s.AuctionLine.Seller + " auctions, '" + s.AuctionLine.itemLine + `'", "items" : [` + itemMap + `] }`
-	outputString += "] }"
+	if len(itemMap) > 0 {
+		itemMap = itemMap[0:len(itemMap)-2] // remove last ", "
+	}
+
+	outputString := `{ "Lines" : [{ "line" : "` + s.AuctionLine.Seller + " auctions, '" + s.AuctionLine.itemLine + `'", "items" : [` + itemMap + `] } ] }`
 
 	return []byte(outputString)
 }
