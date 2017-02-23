@@ -182,7 +182,7 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	fmt.Println("Processed all lines")
 
 	if len(auctions) > 0 {
-		go c.saveAuctionData(auctions)
+		c.saveAuctionData(auctions)
 	}
 }
 
@@ -315,7 +315,7 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 
 			// Don't deal with capitlization, remove it here (trie only checks lowercase)
 			line = strings.ToLower(auction.itemLine)
-			line = ReplaceMultiple(line, "", ",", "&", "\\", "/")
+			line = ReplaceMultiple(line, " ", ",", "&", "\\", "/")
 
 			// NOTE: We use Go's `continue` kewyword to break execution flow instead of
 			// chaining else-if's.  I personally find this more readable with the
