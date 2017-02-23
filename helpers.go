@@ -33,6 +33,15 @@ func TitleCase(name string, urlFriendly bool) string {
 	return uriString
 }
 
+func ReplaceMultiple(src string, replaceWith string, matchWith ...string) string {
+	out := src
+	for _, word := range matchWith {
+		out = strings.Replace(out, word, replaceWith, -1)
+	}
+
+	return out
+}
+
 // Replaces fmt.Println and is used for logging debug messages
 func LogInDebugMode(message string, args ...interface{}) {
 	if DEBUG {
