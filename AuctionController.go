@@ -216,12 +216,30 @@ func (c *AuctionController) extractParserInformationFromLine(line string, auctio
 // prefix and if it does we insert it to the trie, we insert with
 // a base value of quant 1.0 then our pricing parser will fill in the
 // rest
+// TODO this could be optimised, we do some many checks here where we
+// could probably optimised
 func (c *AuctionController) appendIfInTrie(item *Item, out *[]Item) {
 	if c.ItemTrie.Has(strings.TrimSpace(item.Name)) {
 		item.Quantity = 1.0
 		*out = append(*out, *item)
-	} else if c.ItemTrie.Has("spell: " + strings.TrimSpace(item.Name)) {
+	} else if c.ItemTrie.Has("spell: " + strings.TrimSpace(item.Name))  {
 		item.Name = "spell: " + item.Name
+		item.Quantity = 1.0
+		*out = append(*out, *item)
+	} else if c.ItemTrie.Has("rune of " + strings.TrimSpace(item.Name)) {
+		item.Name = "rune of " + item.Name
+		item.Quantity = 1.0
+		*out = append(*out, *item)
+	} else if c.ItemTrie.Has("rune of the " + strings.TrimSpace(item.Name)) {
+		item.Name = "rune of the " + item.Name
+		item.Quantity = 1.0
+		*out = append(*out, *item)
+	} else if c.ItemTrie.Has("words of " + strings.TrimSpace(item.Name)) {
+		item.Name = "words of " + item.Name
+		item.Quantity = 1.0
+		*out = append(*out, *item)
+	} else if c.ItemTrie.Has("words of the " + strings.TrimSpace(item.Name)) {
+		item.Name = "words of the " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
 	}
@@ -340,7 +358,20 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 				// if we are then we reset the buffer and attempt to append to the trie
 				// if our buffer contains a match
 				//fmt.Println("checking if trie has: ", string(buffer))
-				if c.ItemTrie.HasPrefix(strings.TrimLeft(string(buffer), " ")) || c.ItemTrie.HasPrefix("spell: " + strings.TrimLeft(string(buffer), " ")) {
+				// TODO optimise the check for spell, rune, words etc. The method chaining
+				// could probably be done with a single lookup method instead of chaining in the condition
+				//
+				// If we don't find any matches in the trie then we want to clear out the buffer
+				// if the last character in the buffer is a space.  We do this because we still
+				// want to try and parse price data which is not stored in the tree obviously.
+				// If we don't clear the buffer then the parse can occasionally miss items
+				// on its pass through
+				if c.ItemTrie.HasPrefix(strings.TrimLeft(string(buffer), " ")) ||
+				   c.ItemTrie.HasPrefix("spell: " + strings.TrimLeft(string(buffer), " ")) ||
+				   c.ItemTrie.HasPrefix("words of " + strings.TrimLeft(string(buffer), " ")) ||
+				   c.ItemTrie.HasPrefix("words of the " + strings.TrimLeft(string(buffer), " ")) ||
+				   c.ItemTrie.HasPrefix("rune of " + strings.TrimLeft(string(buffer), " ")) ||
+				   c.ItemTrie.HasPrefix("rune of the " + strings.TrimLeft(string(buffer), " ")) {
 					prevMatch = string(buffer)
 					//fmt.Println("Has prefix: ", string(buffer))
 					if i == len(line)-1 {
@@ -353,6 +384,8 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 					}
 
 					continue
+				} else if(string(buffer[len(buffer)-1]) == " ") {
+					buffer = []byte{}
 				}
 				// The trie did not have the prefix composed of the char buffer, we now evaluate
 				// the "previousMatch" which is the buffer string n-1.  We can assume that
