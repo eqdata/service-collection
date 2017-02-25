@@ -200,7 +200,7 @@ func (c *AuctionController) extractParserInformationFromLine(line string, auctio
 	t, err := time.Parse(layout, date)
 	t.Format("02-01-2006 15:04:05")
 	if err != nil {
-		return errors.New("Invalid date stamp for this line, cannot parse! ∂" + err.Error())
+		return errors.New("Invalid date stamp for this line, cannot parse!" + err.Error())
 	}
 
 	auction.raw = line
@@ -484,7 +484,7 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
 	//fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
-	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, created_at) " +
+	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, created_at, raw_auction) " +
 		" VALUES "
 
 	wg := sync.WaitGroup{}
