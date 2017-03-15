@@ -204,7 +204,7 @@ func (c *AuctionController) extractParserInformationFromLine(line string, auctio
 	}
 
 	auction.raw = line
-	auction.Timestamp = t
+	//auction.Timestamp = matches[1]  only temp maybe
 	auction.Seller = matches[2]
 	auction.itemLine = matches[3]
 
@@ -484,7 +484,8 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
 	//fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
-	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, created_at, raw_auction) " +
+	// Removed timestamp temporarily, mayb eperm
+	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, raw_auction) " +
 		" VALUES "
 
 	wg := sync.WaitGroup{}
@@ -504,8 +505,8 @@ func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	wg.Wait()
 
 	auctionQuery = auctionQuery[0:len(auctionQuery)-1]
-	//fmt.Println("Params are: ", auctionParams)
-	//fmt.Println("Query is: ", auctionQuery)
+	fmt.Println("Params are: ", auctionParams)
+	fmt.Println("Query is: ", auctionQuery)
 	if DB.conn != nil && len(auctionParams) > 0 {
 		DB.Insert(auctionQuery, auctionParams...)
 	}

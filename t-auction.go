@@ -95,13 +95,13 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 		for i, item := range a.Items {
 			LogInDebugMode("Checking item: ", item.Name + " for seller: " + a.Seller)
 			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) && item.id > 0 {
-				auctionQuery += "(?, ?, ?, ?, ?, ?, ?),"
+				auctionQuery += "(?, ?, ?, ?, ?, ?),"
 				auctionParams = append(auctionParams, playerId)
 				auctionParams = append(auctionParams, item.id)
 				auctionParams = append(auctionParams, prices[i])
 				auctionParams = append(auctionParams, quants[i])
 				auctionParams = append(auctionParams, a.Server)
-				auctionParams = append(auctionParams, a.Timestamp)
+				//auctionParams = append(auctionParams, a.Timestamp)
 				auctionParams = append(auctionParams, (a.Seller + " auctions, '" + a.itemLine + "'"))
 			} else if item.id <= 0 {
 				LogInDebugMode("Item: ", item.Name + " does not have an id :(")
