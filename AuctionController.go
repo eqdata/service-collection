@@ -352,6 +352,17 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 					skippedChar = []byte{}
 				}
 
+				// Create a test string based on the current buffer but we stripped the prefix of
+				// a or an from the front if we can't get a match on the initial buffer
+				// This will allow us to still match things like A Shamanistic Shenannigan Doll
+				nameWithoutPrefix := strings.ToLower(string(buffer))
+				nameWithoutPrefix = strings.Replace(strings.TrimSpace(nameWithoutPrefix), "a ", "", -1);
+				nameWithoutPrefix = strings.Replace(strings.TrimSpace(nameWithoutPrefix), "an ", "", -1);
+
+				if !c.ItemTrie.HasPrefix(strings.TrimLeft(string(buffer), " ")) && c.ItemTrie.HasPrefix(strings.TrimLeft(nameWithoutPrefix, " ")) {
+					buffer = []byte(nameWithoutPrefix)
+				}
+
 				// check if the current string exists in the buffer, we trim any spaces
 				// from the left but not the right as that can skew the results
 				// if we find a match store the previous match, for the next iteration.
