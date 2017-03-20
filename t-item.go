@@ -86,8 +86,7 @@ func (i *Item) ParsePriceAndQuantity(buffer *[]byte, auction *Auction) bool {
 			//fmt.Println("setting quantity: ", fmt.Sprint(int16(price)))
 			item.Quantity = int16(price)
 		} else if price > 0.0 && float32(price * multiplier) > item.Price {
-			//item.Price = float32((price * multiplier) / float64(item.Quantity))
-			item.Price = float32(price * multiplier);
+			item.Price = float32((price * multiplier) / float64(item.Quantity))
 		}
 
 		return true
