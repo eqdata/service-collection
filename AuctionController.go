@@ -208,6 +208,10 @@ func (c *AuctionController) extractParserInformationFromLine(line string, auctio
 	auction.Seller = matches[2]
 	auction.itemLine = matches[3]
 
+	fmt.Println("Auction raw: " + auction.raw);
+	fmt.Println("Auction seller: " + auction.Seller);
+	fmt.Println("Auction line: " + auction.itemLine);
+
 	return nil
 }
 
@@ -275,10 +279,11 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 
 		LogInDebugMode("Parsing line: ", line)
 
-		if !c.shouldParse(&auction.raw, auction.Server) {
+		cachedLine := auction.Seller + " auctions, '" + auction.itemLine + "'"
+		if !c.shouldParse(&cachedLine, auction.Server) {
 			// If we can't parse then just append it to the relay server (could be the same  message)
 			// dont do this yet, there is probably a better way of handling this!
-			fmt.Println("Can't parse this line")
+			fmt.Println("Can't parse this line: ", cachedLine)
 			/*
 			for _, itemName := range itemList {
 				var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
