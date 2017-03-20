@@ -501,7 +501,7 @@ func (c *AuctionController) saveAuctionData(auctions []Auction) {
 	// Spawn all go save events:
 	//fmt.Println("Saving: " + fmt.Sprint(len(auctions)) + " auctions", auctions)
 	// Removed timestamp temporarily, mayb eperm
-	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, raw_auction) " +
+	auctionQuery := "INSERT INTO auctions (player_id, item_id, price, quantity, server, raw_auction, for_sale) " +
 		" VALUES "
 
 	wg := sync.WaitGroup{}

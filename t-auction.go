@@ -44,10 +44,12 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 		var params []string
 		var prices []float32
 		var quants []int32
+		var sellable []bool
 		for _, item := range a.Items {
 			itemsQuery += "?,"
 			params = append(params, strings.TrimSpace(item.Name))
 			prices = append(prices, item.Price)
+			sellable = append(sellable, item.selling)
 			if item.Quantity == 0 {
 				item.Quantity = 1
 			}
@@ -95,7 +97,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 		for i, item := range a.Items {
 			LogInDebugMode("Checking item: ", item.Name + " for seller: " + a.Seller)
 			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) && item.id > 0 {
-				auctionQuery += "(?, ?, ?, ?, ?, ?),"
+				auctionQuery += "(?, ?, ?, ?, ?, ?, ?),"
 				auctionParams = append(auctionParams, playerId)
 				auctionParams = append(auctionParams, item.id)
 				auctionParams = append(auctionParams, prices[i])
@@ -103,6 +105,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 				auctionParams = append(auctionParams, a.Server)
 				//auctionParams = append(auctionParams, a.Timestamp)
 				auctionParams = append(auctionParams, (a.Seller + " auctions, '" + a.itemLine + "'"))
+				auctionParams = append(auctionParams, sellable[i])
 			} else if item.id <= 0 {
 				LogInDebugMode("Item: ", item.Name + " does not have an id :(")
 			} else {
