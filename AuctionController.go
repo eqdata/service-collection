@@ -157,6 +157,9 @@ func (c *AuctionController) parse(rawAuctions *RawAuctions, characterName, serve
 	c.ItemTrie.Add("buying")
 	c.ItemTrie.Add("wtb")
 	c.ItemTrie.Add("wts")
+	c.ItemTrie.Add("ea")
+	c.ItemTrie.Add("each")
+	c.ItemTrie.Add("per")
 
 	// Load all items into Trie structure
 	itemQuery := "SELECT displayName, id FROM items ORDER BY displayName ASC"
@@ -222,31 +225,39 @@ func (c *AuctionController) extractParserInformationFromLine(line string, auctio
 // rest
 // TODO this could be optimised, we do some many checks here where we
 // could probably optimised
-func (c *AuctionController) appendIfInTrie(item *Item, out *[]Item) {
+func (c *AuctionController) appendIfInTrie(item *Item, out *[]Item) bool {
 	if c.ItemTrie.Has(strings.TrimSpace(item.Name)) {
 		item.Quantity = 1.0
 		*out = append(*out, *item)
+		return true
 	} else if c.ItemTrie.Has("spell: " + strings.TrimSpace(item.Name))  {
 		item.Name = "spell: " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
+		return true
 	} else if c.ItemTrie.Has("rune of " + strings.TrimSpace(item.Name)) {
 		item.Name = "rune of " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
+		return true
 	} else if c.ItemTrie.Has("rune of the " + strings.TrimSpace(item.Name)) {
 		item.Name = "rune of the " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
+		return true
 	} else if c.ItemTrie.Has("words of " + strings.TrimSpace(item.Name)) {
 		item.Name = "words of " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
+		return true
 	} else if c.ItemTrie.Has("words of the " + strings.TrimSpace(item.Name)) {
 		item.Name = "words of the " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
+		return true
 	}
+
+	return false
 }
 
 // New parse line strategy, code is fairly self explanatory
@@ -368,6 +379,14 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 					buffer = []byte(nameWithoutPrefix)
 				}
 
+				if c.checkIfQuantityWasBasedOnEach(strings.TrimSpace(string(buffer))) && len(auction.Items) > 0 {
+					auction.Items[len(auction.Items) -1].Price *= float32(auction.Items[len(auction.Items) -1].Quantity)
+					buffer = []byte{}
+					prevMatch = ""
+					skippedChar = []byte{}
+					continue
+				}
+
 				// check if the current string exists in the buffer, we trim any spaces
 				// from the left but not the right as that can skew the results
 				// if we find a match store the previous match, for the next iteration.
@@ -431,6 +450,7 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 
 					item.Name = prevMatch
 					item.selling = selling
+
 					c.appendIfInTrie(&item, &auction.Items)
 				}
 				// This is the final part of the parser, the previous block will have added a
@@ -471,12 +491,24 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 
 			// Append to the output array and send it to the web front end (batching updates looks slow)
 			*auctions = append(*auctions, auction)
-			go c.publishToRelayService(auction)
-			go c.sendItemsToWikiService(itemsForWikiService)
+			//go c.publishToRelayService(auction)
+			//go c.sendItemsToWikiService(itemsForWikiService)
 
 			wg.Done()
 		}
 	}
+}
+
+func (c *AuctionController) checkIfQuantityWasBasedOnEach(term string) bool {
+	fmt.Println("Checking line: ", term)
+	re := regexp.MustCompile(`[a-z]+`)
+	match := re.FindStringSubmatch(term)
+	if len(match) > 0 {
+		term = match[0]
+	}
+
+	fmt.Println("Each is: ", term)
+	return term == "ea" || term == "each" || term == "per"
 }
 
 // Publishes a list of items to the wiki service to fetch their stats
