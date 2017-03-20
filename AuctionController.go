@@ -491,8 +491,8 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 
 			// Append to the output array and send it to the web front end (batching updates looks slow)
 			*auctions = append(*auctions, auction)
-			//go c.publishToRelayService(auction)
-			//go c.sendItemsToWikiService(itemsForWikiService)
+			go c.publishToRelayService(auction)
+			go c.sendItemsToWikiService(itemsForWikiService)
 
 			wg.Done()
 		}
