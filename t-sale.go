@@ -7,9 +7,9 @@ import (
 
 // Used to represent a single unit of a sale
 type Sale struct {
-	Seller string
-	ItemId int64
-	Price float32
+	Seller   string
+	ItemId   int64
+	Price    float32
 	Quantity int32
 }
 

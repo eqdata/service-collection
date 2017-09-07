@@ -3,8 +3,8 @@ package main
 import "net/http"
 
 type Route struct {
-	name 	string
-	method 	string
+	name    string
+	method  string
 	pattern string
 	handler http.HandlerFunc
 }
@@ -12,8 +12,8 @@ type Route struct {
 type Routes []Route
 
 // Define any application routes here
-var routes = Routes {
-	Route {
+var routes = Routes{
+	Route{
 		"Store Auction",
 		"POST",
 		"/channels/auction",

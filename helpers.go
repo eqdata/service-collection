@@ -1,8 +1,8 @@
 package main
 
 import (
-	"strings"
 	"fmt"
+	"strings"
 )
 
 // MIGRATE THIS TO stringutil eventually
@@ -15,7 +15,7 @@ func TitleCase(name string, urlFriendly bool) string {
 	uriString := ""
 	for _, part := range uriParts {
 		compare := strings.ToLower(part)
-		if(compare == "the" || compare == "of" || compare == "or" || compare == "and" || compare == "a" || compare == "an" || compare == "on" || compare == "to") {
+		if compare == "the" || compare == "of" || compare == "or" || compare == "and" || compare == "a" || compare == "an" || compare == "on" || compare == "to" {
 			part = strings.ToLower(part)
 		} else {
 			part = strings.Title(part)
@@ -29,7 +29,7 @@ func TitleCase(name string, urlFriendly bool) string {
 
 	uriString = strings.Replace(uriString, "'S", "'s", -1)
 	uriString = strings.Replace(uriString, "`S", "`s", -1)
-	uriString = uriString[0:len(uriString)-1]
+	uriString = uriString[0 : len(uriString)-1]
 	return uriString
 }
 

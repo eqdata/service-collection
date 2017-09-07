@@ -1,26 +1,26 @@
 package main
 
 import (
-	"net/http"
-	"fmt"
-	"encoding/json"
-	"strings"
-	"regexp"
-	"hash/fnv"
-	"github.com/bradfitz/gomemcache/memcache"
-	"sync"
 	"bytes"
-	"io/ioutil"
-	"time"
-	"github.com/fvbock/trie"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/alexmk92/stringutil"
+	"github.com/bradfitz/gomemcache/memcache"
+	"github.com/fvbock/trie"
+	"hash/fnv"
+	"io/ioutil"
+	"net/http"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
 )
 
 type WalkResult struct {
-	match bool
+	match      bool
 	searchTerm string
-	value string
+	value      string
 }
 
 func (w *WalkResult) reset() {
@@ -31,7 +31,7 @@ func (w *WalkResult) reset() {
 
 type AuctionController struct {
 	Controller
-	ItemTrie *trie.Trie
+	ItemTrie   *trie.Trie
 	WalkResult WalkResult
 }
 
@@ -46,10 +46,14 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	validServer := (serverType == "RED" || serverType == "BLUE")
 	// check for invalid credentials
 	if len(strings.TrimSpace(apiKey)) != 14 || len(strings.TrimSpace(email)) == 5 || len(characterName) < 3 || !validServer {
-		if apiKey == "" { apiKey = "nil" }
-		if email == "" { email = "nil" }
+		if apiKey == "" {
+			apiKey = "nil"
+		}
+		if email == "" {
+			email = "nil"
+		}
 
-		http.Error(w, "Please ensure you send a valid API Token, Email, Character Name and specify RED or BLUE server. You provided email: " + email + ", API Key: " + apiKey + ", Character Name: " + characterName + ", Server Name: " + serverType, 401)
+		http.Error(w, "Please ensure you send a valid API Token, Email, Character Name and specify RED or BLUE server. You provided email: "+email+", API Key: "+apiKey+", Character Name: "+characterName+", Server Name: "+serverType, 401)
 		return
 	}
 
@@ -57,7 +61,7 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	characterName = strings.Title(characterName)
 
 	// Forward to the gatekeeper to see if this pair of items match
-	req, err := http.NewRequest("GET", "http://" + GATEKEEPER_SERVICE_HOST + ":" + GATEKEEPER_SERVICE_PORT + "/auth", nil)
+	req, err := http.NewRequest("GET", "http://"+GATEKEEPER_SERVICE_HOST+":"+GATEKEEPER_SERVICE_PORT+"/auth", nil)
 	if err != nil {
 		http.Error(w, "Couldn't contact the gatekeeper service", 500)
 		return
@@ -65,7 +69,7 @@ func (c *AuctionController) store(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("apiKey", apiKey)
 	req.Header.Set("email", email)
 
-	var client = &http.Client {
+	var client = &http.Client{
 		Timeout: time.Second * 10,
 	}
 	resp, err := client.Do(req)
@@ -110,14 +114,13 @@ func (c *AuctionController) isAuctionLine(line *string) bool {
 	return isValid
 }
 
-
 // Gets a unique hash of the auction string and checks if it exists in memcached,
 // if it does we parse the line, else we skip it
 func (c *AuctionController) shouldParse(line *string, server string) bool {
 
 	// Create a 64bit hash key from this string
 	hash := func(ln string) uint64 {
-		h:= fnv.New64a()
+		h := fnv.New64a()
 		h.Write([]byte(ln))
 		return h.Sum64()
 	}(*line)
@@ -211,9 +214,9 @@ func (c *AuctionController) extractParserInformationFromLine(line string, auctio
 	auction.Seller = matches[2]
 	auction.itemLine = matches[3]
 
-	fmt.Println("Auction raw: " + auction.raw);
-	fmt.Println("Auction seller: " + auction.Seller);
-	fmt.Println("Auction line: " + auction.itemLine);
+	fmt.Println("Auction raw: " + auction.raw)
+	fmt.Println("Auction seller: " + auction.Seller)
+	fmt.Println("Auction line: " + auction.itemLine)
 
 	return nil
 }
@@ -230,7 +233,7 @@ func (c *AuctionController) appendIfInTrie(item *Item, out *[]Item) bool {
 		item.Quantity = 1.0
 		*out = append(*out, *item)
 		return true
-	} else if c.ItemTrie.Has("spell: " + strings.TrimSpace(item.Name))  {
+	} else if c.ItemTrie.Has("spell: " + strings.TrimSpace(item.Name)) {
 		item.Name = "spell: " + item.Name
 		item.Quantity = 1.0
 		*out = append(*out, *item)
@@ -296,12 +299,12 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 			// dont do this yet, there is probably a better way of handling this!
 			fmt.Println("Can't parse this line: ", cachedLine)
 			/*
-			for _, itemName := range itemList {
-				var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
-				auction.Items = append(auction.Items, item)
-			}
-			auctions = append(auctions, auction)
-			go c.publish(auctions, false)
+				for _, itemName := range itemList {
+					var item = Item{Name:itemName, Price:0.0, Quantity: 1, id:0}
+					auction.Items = append(auction.Items, item)
+				}
+				auctions = append(auctions, auction)
+				go c.publish(auctions, false)
 			*/
 			wg.Done()
 		} else {
@@ -372,15 +375,15 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 				// a or an from the front if we can't get a match on the initial buffer
 				// This will allow us to still match things like A Shamanistic Shenannigan Doll
 				nameWithoutPrefix := strings.ToLower(string(buffer))
-				nameWithoutPrefix = strings.Replace(strings.TrimSpace(nameWithoutPrefix), "a ", "", -1);
-				nameWithoutPrefix = strings.Replace(strings.TrimSpace(nameWithoutPrefix), "an ", "", -1);
+				nameWithoutPrefix = strings.Replace(strings.TrimSpace(nameWithoutPrefix), "a ", "", -1)
+				nameWithoutPrefix = strings.Replace(strings.TrimSpace(nameWithoutPrefix), "an ", "", -1)
 
 				if !c.ItemTrie.HasPrefix(strings.TrimLeft(string(buffer), " ")) && c.ItemTrie.HasPrefix(strings.TrimLeft(nameWithoutPrefix, " ")) {
 					buffer = []byte(nameWithoutPrefix)
 				}
 
 				if c.checkIfQuantityWasBasedOnEach(strings.TrimSpace(string(buffer))) && len(auction.Items) > 0 {
-					auction.Items[len(auction.Items) -1].Price *= float32(auction.Items[len(auction.Items) -1].Quantity)
+					auction.Items[len(auction.Items)-1].Price *= float32(auction.Items[len(auction.Items)-1].Quantity)
 					buffer = []byte{}
 					prevMatch = ""
 					skippedChar = []byte{}
@@ -403,11 +406,11 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 				// If we don't clear the buffer then the parse can occasionally miss items
 				// on its pass through
 				if c.ItemTrie.HasPrefix(strings.TrimLeft(string(buffer), " ")) ||
-				   c.ItemTrie.HasPrefix("spell: " + strings.TrimLeft(string(buffer), " ")) ||
-				   c.ItemTrie.HasPrefix("words of " + strings.TrimLeft(string(buffer), " ")) ||
-				   c.ItemTrie.HasPrefix("words of the " + strings.TrimLeft(string(buffer), " ")) ||
-				   c.ItemTrie.HasPrefix("rune of " + strings.TrimLeft(string(buffer), " ")) ||
-				   c.ItemTrie.HasPrefix("rune of the " + strings.TrimLeft(string(buffer), " ")) {
+					c.ItemTrie.HasPrefix("spell: "+strings.TrimLeft(string(buffer), " ")) ||
+					c.ItemTrie.HasPrefix("words of "+strings.TrimLeft(string(buffer), " ")) ||
+					c.ItemTrie.HasPrefix("words of the "+strings.TrimLeft(string(buffer), " ")) ||
+					c.ItemTrie.HasPrefix("rune of "+strings.TrimLeft(string(buffer), " ")) ||
+					c.ItemTrie.HasPrefix("rune of the "+strings.TrimLeft(string(buffer), " ")) {
 					prevMatch = string(buffer)
 					//fmt.Println("Has prefix: ", string(buffer))
 					if i == len(line)-1 {
@@ -420,7 +423,7 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 					}
 
 					continue
-				} else if(string(buffer[len(buffer)-1]) == " ") {
+				} else if string(buffer[len(buffer)-1]) == " " {
 					buffer = []byte{}
 				}
 				// The trie did not have the prefix composed of the char buffer, we now evaluate
@@ -444,7 +447,9 @@ func (c *AuctionController) parseLine(line, characterName, serverType string, wg
 					// We don't want to put spaces back into the buffer, the whole purpose of
 					// skippedChar is to catch cases where uses budge items together.
 					// Therefore we will only append non space characters.
-					if string(byte(char)) != " " { skippedChar = append(skippedChar, byte(char)) }
+					if string(byte(char)) != " " {
+						skippedChar = append(skippedChar, byte(char))
+					}
 					//fmt.Println("Buffer is: ", (string(buffer)))
 					//fmt.Println("Skipped buffer is: ", string(skippedChar))
 
@@ -517,7 +522,7 @@ func (c *AuctionController) sendItemsToWikiService(items []string) {
 		//fmt.Println("Sending: " + fmt.Sprint(len(items)) + " items to wiki service.")
 
 		encodedItems, _ := json.Marshal(items)
-		resp, err := http.Post("http://" + WIKI_SERVICE_HOST + ":" + WIKI_SERVICE_PORT + "/items", "application/json", bytes.NewBuffer(encodedItems))
+		resp, err := http.Post("http://"+WIKI_SERVICE_HOST+":"+WIKI_SERVICE_PORT+"/items", "application/json", bytes.NewBuffer(encodedItems))
 		if err != nil {
 			fmt.Println(err)
 		} else {
@@ -552,14 +557,14 @@ func (c *AuctionController) saveAuctionData(auctions []Auction) {
 
 	wg.Wait()
 
-	auctionQuery = auctionQuery[0:len(auctionQuery)-1]
+	auctionQuery = auctionQuery[0 : len(auctionQuery)-1]
 	fmt.Println("Params are: ", auctionParams)
 	fmt.Println("Query is: ", auctionQuery)
 	if DB.conn != nil && len(auctionParams) > 0 {
 		DB.Insert(auctionQuery, auctionParams...)
 	}
 
-	fmt.Println("Successfully saved: " + fmt.Sprint(len(auctionParams) / 5) + " items for auction")
+	fmt.Println("Successfully saved: " + fmt.Sprint(len(auctionParams)/5) + " items for auction")
 }
 
 func (c *AuctionController) publishToRelayService(auction Auction) {
@@ -568,14 +573,14 @@ func (c *AuctionController) publishToRelayService(auction Auction) {
 
 	// Serialize to JSON to pass to the Relay server
 	sa := SerializedAuction{AuctionLine: auction}
-	req, err := http.NewRequest("POST", "http://" + RELAY_SERVICE_HOST + ":" + RELAY_SERVICE_PORT + "/auctions/" + strings.ToLower(auction.Server), bytes.NewBuffer(sa.toJSONString()))
+	req, err := http.NewRequest("POST", "http://"+RELAY_SERVICE_HOST+":"+RELAY_SERVICE_PORT+"/auctions/"+strings.ToLower(auction.Server), bytes.NewBuffer(sa.toJSONString()))
 	if err != nil {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 	//fmt.Print("Sending req: ", req)
 
-	var client = &http.Client {
+	var client = &http.Client{
 		Timeout: time.Second * 10,
 	}
 	resp, err := client.Do(req)

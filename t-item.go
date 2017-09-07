@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 /*
@@ -22,14 +22,14 @@ import (
  | @member price (float32): The advertised price
  | @member statistics ([]Statistic): An array of all stats for this item
  |
- */
+*/
 
 type Item struct {
-	Name string
-	Price float32
+	Name     string
+	Price    float32
 	Quantity int16
-	selling bool
-	id int64
+	selling  bool
+	id       int64
 }
 
 // This method should be fairly self explanatory.  We simply use a regex to
@@ -52,21 +52,33 @@ func (i *Item) ParsePriceAndQuantity(buffer *[]byte, auction *Auction) bool {
 		matches = matches[1:]
 		price, err := strconv.ParseFloat(strings.TrimSpace(matches[1]), 64)
 		if err != nil {
-			fmt.Println("error setting for string: " + strings.TrimSpace(matches[1]) + ", price: ", err)
+			fmt.Println("error setting for string: "+strings.TrimSpace(matches[1])+", price: ", err)
 			price = 0.0
 		}
 		var prelimiter string = strings.TrimSpace(strings.ToLower(matches[0]))
 		var delimiter string = strings.ToLower(matches[2])
-		var multiplier float64 = 1.0;
+		var multiplier float64 = 1.0
 		var isQuantity bool = false
 
 		switch delimiter {
-		case "x": isQuantity = true; break;
-		case "p": multiplier = 1.0; break;
-		case "k": multiplier = 1000.0; break;
-		case "pp": multiplier = 1.0; break;
-		case "m": multiplier = 1000000.0; break;
-		default: multiplier = 1; break;
+		case "x":
+			isQuantity = true
+			break
+		case "p":
+			multiplier = 1.0
+			break
+		case "k":
+			multiplier = 1000.0
+			break
+		case "pp":
+			multiplier = 1.0
+			break
+		case "m":
+			multiplier = 1000000.0
+			break
+		default:
+			multiplier = 1
+			break
 		}
 
 		if prelimiter == "x" {
@@ -85,7 +97,7 @@ func (i *Item) ParsePriceAndQuantity(buffer *[]byte, auction *Auction) bool {
 		if isQuantity == true && price > 0.0 {
 			//fmt.Println("setting quantity: ", fmt.Sprint(int16(price)))
 			item.Quantity = int16(price)
-		} else if price > 0.0 && float32(price * multiplier) > item.Price {
+		} else if price > 0.0 && float32(price*multiplier) > item.Price {
 			item.Price = float32((price * multiplier) / float64(item.Quantity))
 		}
 

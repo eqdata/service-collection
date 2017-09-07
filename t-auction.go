@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"github.com/bradfitz/gomemcache/memcache"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,15 +19,15 @@ import (
  | @member items ([]Item) : An array of WTS items associated with this specific auction
  | @member auction_at (time.Time) : Timestamp of when this was auctioned
  |
- */
+*/
 
 type Auction struct {
-	Seller string
+	Seller    string
 	Timestamp time.Time
-	Items []Item
-	Server string
-	itemLine string
-	raw string
+	Items     []Item
+	Server    string
+	itemLine  string
+	raw       string
 }
 
 func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) {
@@ -95,7 +95,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 
 		var auctionParams []interface{}
 		for i, item := range a.Items {
-			LogInDebugMode("Checking item: ", item.Name + " for seller: " + a.Seller)
+			LogInDebugMode("Checking item: ", item.Name+" for seller: "+a.Seller)
 			if !a.itemRecentlyAuctionedByPlayer(item.id, prices[i], quants[i]) && item.id > 0 {
 				auctionQuery += "(?, ?, ?, ?, ?, ?, ?),"
 				auctionParams = append(auctionParams, playerId)
@@ -107,9 +107,9 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 				auctionParams = append(auctionParams, (a.Seller + " auctions, '" + a.itemLine + "'"))
 				auctionParams = append(auctionParams, sellable[i])
 			} else if item.id <= 0 {
-				LogInDebugMode("Item: ", item.Name + " does not have an id :(")
+				LogInDebugMode("Item: ", item.Name+" does not have an id :(")
 			} else {
-				LogInDebugMode("Item: ", item.Name + " was recently sold")
+				LogInDebugMode("Item: ", item.Name+" was recently sold")
 			}
 		}
 
@@ -126,7 +126,7 @@ func (a *Auction) ExtractQueryInformation(callback func(string, []interface{})) 
 // then we wont save its record out to the DB unless the price has changed
 func (a *Auction) itemRecentlyAuctionedByPlayer(itemId int64, price float32, quantity int32) bool {
 
-	var s Sale = Sale{Seller:a.Seller, ItemId: itemId, Price: price, Quantity: quantity}
+	var s Sale = Sale{Seller: a.Seller, ItemId: itemId, Price: price, Quantity: quantity}
 
 	// Attempt to fetch the item from memached
 	mc := memcache.New(MC_HOST + ":" + MC_PORT)

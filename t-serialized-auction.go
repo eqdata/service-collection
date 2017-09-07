@@ -33,10 +33,16 @@ func (s *SerializedAuction) toJSONString() []byte {
 	itemMap := ""
 	for _, item := range s.AuctionLine.Items {
 		uri := TitleCase(strings.TrimSpace(item.Name), true)
-		itemMap += `{ "name" : "` + TitleCase(strings.TrimSpace(item.Name), false) + `", "uri" : "` + uri + `" }, `
+		price := fmt.Sprint(item.Price)
+		selling := fmt.Sprint(item.selling)
+		qty := ""
+		if item.Quantity > 1 {
+			qty = `, "qty" : ` + fmt.Sprint(item.Quantity)
+		}
+		itemMap += `{ "name" : "` + TitleCase(strings.TrimSpace(item.Name), false) + `", "uri" : "` + uri + `", "selling" : ` + selling + `, "price" : ` + price + qty + ` }, `
 	}
 	if len(itemMap) > 0 {
-		itemMap = itemMap[0:len(itemMap)-2] // remove last ", "
+		itemMap = itemMap[0 : len(itemMap)-2] // remove last ", "
 	}
 
 	outputString := `{ "Lines" : [{ "line" : "` + s.AuctionLine.Seller + " auctions, '" + s.AuctionLine.itemLine + `'", "items" : [` + itemMap + `] } ] }`

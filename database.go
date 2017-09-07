@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"database/sql"
+	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -15,7 +15,7 @@ func (d *Database) ConnectionString() string {
 }
 
 func (d *Database) Open() bool {
-	conn := d.ConnectionString();
+	conn := d.ConnectionString()
 	fmt.Println("Connecting to: ", conn)
 	db, err := sql.Open("mysql", conn)
 	if err != nil {

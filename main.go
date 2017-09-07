@@ -1,9 +1,9 @@
 package main
 
 import (
-	"net/http"
-	"log"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,7 +31,7 @@ func main() {
 	fmt.Println("Starting webserver...")
 	fmt.Println("Listening on port: " + PORT)
 	router := CreateRouter()
-	log.Fatal(http.ListenAndServe(":" + PORT, router))
+	log.Fatal(http.ListenAndServe(":"+PORT, router))
 }
 
 func cleanup() {

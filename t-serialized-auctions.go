@@ -35,12 +35,12 @@ func (s *SerializedAuctions) toJSONString() []byte {
 	for _, auction := range s.AuctionLines {
 		for _, item := range auction.Items {
 			uri := TitleCase(item.Name, true)
-			auction.raw = strings.Replace(auction.raw, item.Name, "<a class='item' href='/" + uri + "'>" + item.Name + "</a>", 1)
+			auction.raw = strings.Replace(auction.raw, item.Name, "<a class='item' href='/"+uri+"'>"+item.Name+"</a>", 1)
 		}
 		outputString += `{ "line" : "` + auction.raw + `" },`
 	}
 
-	outputString = outputString[0:len(outputString)-1] // remove last ,
+	outputString = outputString[0 : len(outputString)-1] // remove last ,
 	outputString += "] }"
 
 	LogInDebugMode(outputString)
